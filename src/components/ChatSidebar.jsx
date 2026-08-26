@@ -41,7 +41,7 @@ export default function ChatSidebar({ view }) {
       historyRef.current = historyRef.current.slice(-10);
 
       const action = mapActions[intent.action] || mapActions.none;
-      const reply = await action(view, intent.params || {});
+      const reply = await action(view, { ...(intent.params || {}), _userPrompt: prompt });
       addMessage("bot", reply);
     } catch (err) {
       console.error("Error al procesar la petición:", err);
