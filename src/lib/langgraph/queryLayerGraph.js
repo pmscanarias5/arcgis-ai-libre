@@ -1,10 +1,7 @@
 import { StateGraph, Annotation, START, END } from "@langchain/langgraph";
 import { callStructuredLLM } from "../llm/callStructuredLLM.js";
+import { selectLayerNode, loadSchemaNode, findLabelField } from "./sharedNodes.js";
 
-// Estado compartido entre los nodos del grafo. `view` y `layer` guardan
-// referencias directas a instancias del SDK de ArcGIS: al no usar ningún
-// checkpointer (todo corre en memoria, en el propio navegador, en una sola
-// pasada), no hace falta que el estado sea serializable.
 const QueryLayerState = Annotation.Root({
   userPrompt: Annotation(),
   availableLayers: Annotation(),
@@ -19,69 +16,6 @@ const QueryLayerState = Annotation.Root({
   resultText: Annotation()
 });
 
-function normalize(str) {
-  return (str || "")
-    .toString()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-}
-
-function findLabelField(fields, displayFieldName) {
-  if (displayFieldName) {
-    const f = fields.find((f) => f.name === displayFieldName);
-    if (f) return f;
-  }
-  const candidates = ["nombre", "name", "municipio", "denominacion", "etiqueta", "rotulo", "toponimo"];
-  return (
-    fields.find((f) => candidates.some((c) => normalize(f.name).includes(c) || normalize(f.alias).includes(c))) ||
-    fields.find((f) => f.type === "string") ||
-    null
-  );
-}
-
-// --- Nodo 1: decidir qué capa, viendo la lista real de capas cargadas ---
-const SELECT_LAYER_PROMPT = `Eres un asistente que identifica a qué capa geográfica se refiere una
-petición del usuario, eligiendo EXCLUSIVAMENTE entre una lista de capas que están
-realmente cargadas en el mapa. No inventes capas que no estén en la lista.
-
-Responde solo con JSON, sin texto adicional:
-{"layer_id":"<id exacto de la lista>"} si encuentras una coincidencia razonable
-{"layer_id":null} si ninguna capa de la lista encaja con la petición`;
-
-async function selectLayerNode(state) {
-  const layersDescription = state.availableLayers
-    .map((l) => `- id: "${l.id}", título: "${l.title}"`)
-    .join("\n");
-
-  const userContent = `Capas cargadas en el mapa:\n${layersDescription}\n\nPetición del usuario: "${state.userPrompt}"`;
-  const result = await callStructuredLLM(SELECT_LAYER_PROMPT, [{ role: "user", content: userContent }]);
-  const selectedLayerId = result?.layer_id ?? null;
-
-  if (!selectedLayerId) {
-    return { resultText: "No he identificado ninguna capa cargada que encaje con tu petición." };
-  }
-  return { selectedLayerId };
-}
-
-// --- Nodo 2: cargar el esquema real de campos de la capa elegida (sin LLM) ---
-async function loadSchemaNode(state) {
-  const layer = state.view.map.layers.find((l) => l.id === state.selectedLayerId);
-  if (!layer) {
-    return { resultText: "La capa seleccionada ya no está disponible en el mapa." };
-  }
-
-  await layer.load();
-
-  if (typeof layer.queryFeatures !== "function") {
-    return { resultText: `La capa <b>${layer.title}</b> no admite consultas de atributos.` };
-  }
-
-  const fields = (layer.fields || []).map((f) => ({ name: f.name, alias: f.alias, type: f.type }));
-  return { layer, fields };
-}
-
-// --- Nodo 3: construir la consulta viendo los campos reales de esa capa ---
 const BUILD_QUERY_PROMPT = `Eres un asistente que construye los parámetros de una consulta de
 atributos sobre una capa GIS, a partir de su esquema real de campos. No inventes
 nombres de campo que no estén en la lista proporcionada.
@@ -112,7 +46,6 @@ async function buildQueryNode(state) {
   };
 }
 
-// --- Nodo 4: ejecutar contra el FeatureServer y hacer zoom sobre el resultado ---
 async function executeQueryNode(state) {
   const { layer, view } = state;
 
@@ -149,7 +82,6 @@ async function executeQueryNode(state) {
       ? `El elemento con ${qualifier} <b>${state.metricField.alias || state.metricField.name}</b> en <b>${layer.title}</b>`
       : `Los ${state.limit} elementos con ${qualifier} <b>${state.metricField.alias || state.metricField.name}</b> en <b>${layer.title}</b>`;
 
-  // Zoom automático sobre los resultados (sin marcadores, según lo acordado)
   const geometries = result.features.map((f) => f.geometry).filter(Boolean);
   if (geometries.length === 1) {
     const geom = geometries[0];

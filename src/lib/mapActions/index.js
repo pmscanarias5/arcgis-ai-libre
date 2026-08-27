@@ -1,8 +1,9 @@
 import { changeBasemap } from "./changeBasemap.js";
 import { goToLocation } from "./goToLocation.js";
-import { createBuffer } from "./createBuffer.js";
+// import { createBuffer } from "./createBuffer.js";
 import { queryLayer } from "./queryLayer.js";
 import { printMap } from "./printMap.js";
+import { bufferEntity } from "./bufferEntity.js";
 import { none } from "./none.js";
 
 // Registro de acciones disponibles. Cada una recibe (view, params) y
@@ -12,8 +13,9 @@ import { none } from "./none.js";
 export const mapActions = {
   change_basemap: changeBasemap,
   go_to_location: goToLocation,
-  create_buffer: createBuffer,
+  // create_buffer: createBuffer,
   query_layer: queryLayer,
   print_map: printMap,
+  buffer_entity: bufferEntity,
   none
 };
