@@ -2,7 +2,13 @@ import { StateGraph, Annotation, START, END } from "@langchain/langgraph";
 import Graphic from "@arcgis/core/Graphic";
 import * as geometryEngine from "@arcgis/core/geometry/geometryEngine";
 import { callStructuredLLM } from "../llm/callStructuredLLM.js";
-import { resolveLayer, loadSchemaNode, findLabelField } from "./sharedNodes.js";
+import {
+  resolveLayer,
+  loadSchemaNode,
+  findLabelField,
+  searchDistinctValues,
+  resolveAmbiguousValue
+} from "./sharedNodes.js";
 
 const DEFAULT_DISTANCE_KM = 5;
 
@@ -27,25 +33,6 @@ como "municipio de").
 Responde solo con JSON, sin texto adicional:
 {"search_text":"<fragmento de búsqueda>","distance_km":<num, o null si no se menciona>}`;
 
-const RESOLVE_CANDIDATE_PROMPT = `Eres un asistente que, dada la petición original del usuario y una
-lista de coincidencias reales encontradas en los datos, elige cuál de esas
-coincidencias es la que el usuario quería decir.
-
-Responde solo con JSON, sin texto adicional:
-{"match":"<uno de los valores de la lista, copiado EXACTAMENTE tal cual>"}`;
-
-async function searchCandidates(layer, labelField, searchText) {
-  const safe = searchText.replace(/'/g, "''");
-  const query = layer.createQuery();
-  query.where = `UPPER(${labelField.name}) LIKE UPPER('%${safe}%')`;
-  query.outFields = [labelField.name];
-  query.returnGeometry = false;
-  query.num = 10;
-
-  const result = await layer.queryFeatures(query);
-  return [...new Set(result.features.map((f) => f.attributes[labelField.name]))];
-}
-
 async function buildEntityQueryNode(state) {
   const labelField = findLabelField(state.fields, state.layer.displayField);
   if (!labelField) {
@@ -63,27 +50,13 @@ async function buildEntityQueryNode(state) {
     return { resultText: "No he identificado sobre qué entidad quieres crear el área de influencia." };
   }
 
-  const candidates = await searchCandidates(state.layer, labelField, searchText);
+  const candidates = await searchDistinctValues(state.layer, labelField, searchText);
 
   if (candidates.length === 0) {
     return { resultText: `No he encontrado ninguna entidad en <b>${state.layer.title}</b> parecida a "${searchText}".` };
   }
 
-  let entityValue;
-  if (candidates.length === 1) {
-    entityValue = candidates[0];
-  } else {
-    const disambiguation = await callStructuredLLM(RESOLVE_CANDIDATE_PROMPT, [
-      {
-        role: "user",
-        content: `Petición original: "${state.userPrompt}"\nCoincidencias encontradas: ${candidates
-          .map((c) => `"${c}"`)
-          .join(", ")}`
-      }
-    ]);
-    entityValue = candidates.includes(disambiguation?.match) ? disambiguation.match : candidates[0];
-  }
-
+  const entityValue = await resolveAmbiguousValue(state.userPrompt, candidates);
   return { labelField, entityValue, distanceKm };
 }
 
