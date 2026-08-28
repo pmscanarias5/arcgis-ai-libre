@@ -99,6 +99,28 @@ html, body, #root {
   line-height: 1.4;
   word-wrap: break-word;
 }
+.message-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.message-option-btn {
+  background-color: var(--bg-dark);
+  color: var(--accent-teal);
+  border: 1px solid var(--accent-teal);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.message-option-btn:hover {
+  background-color: var(--accent-teal);
+  color: #052423;
+}
 
 .message.user {
   align-self: flex-end;

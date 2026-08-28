@@ -2,13 +2,12 @@ import { StateGraph, Annotation, START, END } from "@langchain/langgraph";
 import Graphic from "@arcgis/core/Graphic";
 import * as geometryEngine from "@arcgis/core/geometry/geometryEngine";
 import { callStructuredLLM } from "../llm/callStructuredLLM.js";
-import { selectLayerNode, loadSchemaNode, findLabelField } from "./sharedNodes.js";
+import { resolveLayer, loadSchemaNode, findLabelField } from "./sharedNodes.js";
 
 const DEFAULT_DISTANCE_KM = 5;
 
 const BufferEntityState = Annotation.Root({
   userPrompt: Annotation(),
-  availableLayers: Annotation(),
   view: Annotation(),
   selectedLayerId: Annotation(),
   layer: Annotation(),
@@ -35,9 +34,6 @@ coincidencias es la que el usuario quería decir.
 Responde solo con JSON, sin texto adicional:
 {"match":"<uno de los valores de la lista, copiado EXACTAMENTE tal cual>"}`;
 
-// Consulta el FeatureServer real en busca de candidatos que contengan el
-// texto de búsqueda, en vez de fiarnos a ciegas del texto que ha extraído
-// el LLM. Esto es lo que da precisión: el LLM elige entre datos reales.
 async function searchCandidates(layer, labelField, searchText) {
   const safe = searchText.replace(/'/g, "''");
   const query = layer.createQuery();
@@ -56,7 +52,6 @@ async function buildEntityQueryNode(state) {
     return { resultText: `La capa <b>${state.layer.title}</b> no tiene ningún campo de nombre reconocible para buscar la entidad.` };
   }
 
-  // 1ª llamada: solo un texto de búsqueda aproximado, no el nombre "definitivo"
   const extraction = await callStructuredLLM(EXTRACT_SEARCH_TEXT_PROMPT, [
     { role: "user", content: `Petición del usuario: "${state.userPrompt}"` }
   ]);
@@ -76,10 +71,8 @@ async function buildEntityQueryNode(state) {
 
   let entityValue;
   if (candidates.length === 1) {
-    // Coincidencia única: no hace falta gastar otra llamada al LLM
     entityValue = candidates[0];
   } else {
-    // 2ª llamada: desambiguar entre coincidencias REALES, no inventadas
     const disambiguation = await callStructuredLLM(RESOLVE_CANDIDATE_PROMPT, [
       {
         role: "user",
@@ -97,8 +90,6 @@ async function buildEntityQueryNode(state) {
 async function executeBufferNode(state) {
   const { layer, view, labelField, entityValue, distanceKm } = state;
 
-  // Ya sabemos que entityValue es un valor real (viene de searchCandidates),
-  // así que aquí usamos coincidencia EXACTA en vez de LIKE: sin ambigüedad.
   const safeValue = entityValue.replace(/'/g, "''");
   const query = layer.createQuery();
   query.where = `${labelField.name} = '${safeValue}'`;
@@ -132,27 +123,13 @@ async function executeBufferNode(state) {
   };
 }
 
-function routeAfterSelectLayer(state) {
-  return state.resultText ? END : "loadSchema";
-}
-
-function routeAfterLoadSchema(state) {
-  return state.resultText ? END : "buildEntityQuery";
-}
-
-function routeAfterBuildEntityQuery(state) {
-  return state.resultText ? END : "executeBuffer";
-}
-
 const graph = new StateGraph(BufferEntityState)
-  .addNode("selectLayer", selectLayerNode)
   .addNode("loadSchema", loadSchemaNode)
   .addNode("buildEntityQuery", buildEntityQueryNode)
   .addNode("executeBuffer", executeBufferNode)
-  .addEdge(START, "selectLayer")
-  .addConditionalEdges("selectLayer", routeAfterSelectLayer)
-  .addConditionalEdges("loadSchema", routeAfterLoadSchema)
-  .addConditionalEdges("buildEntityQuery", routeAfterBuildEntityQuery)
+  .addEdge(START, "loadSchema")
+  .addConditionalEdges("loadSchema", (state) => (state.resultText ? END : "buildEntityQuery"))
+  .addConditionalEdges("buildEntityQuery", (state) => (state.resultText ? END : "executeBuffer"))
   .addEdge("executeBuffer", END);
 
 const bufferEntityGraph = graph.compile();
@@ -164,6 +141,24 @@ export async function runBufferEntityGraph(view, userPrompt) {
     return "No hay ninguna capa operativa cargada en el mapa todavía.";
   }
 
-  const finalState = await bufferEntityGraph.invoke({ userPrompt, availableLayers, view });
+  const layerResult = await resolveLayer(userPrompt, availableLayers);
+
+  if (layerResult.needsSelection) {
+    return {
+      needsInput: true,
+      question: "No he identificado con certeza a qué capa te refieres. ¿Cuál de estas es?",
+      options: layerResult.options,
+      resume: async (chosenLayerId) => {
+        const finalState = await bufferEntityGraph.invoke({ userPrompt, view, selectedLayerId: chosenLayerId });
+        return finalState.resultText || "No he podido completar el área de influencia.";
+      }
+    };
+  }
+
+  const finalState = await bufferEntityGraph.invoke({
+    userPrompt,
+    view,
+    selectedLayerId: layerResult.selectedLayerId
+  });
   return finalState.resultText || "No he podido completar el área de influencia.";
 }

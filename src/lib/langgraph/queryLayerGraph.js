@@ -1,10 +1,9 @@
 import { StateGraph, Annotation, START, END } from "@langchain/langgraph";
 import { callStructuredLLM } from "../llm/callStructuredLLM.js";
-import { selectLayerNode, loadSchemaNode, findLabelField } from "./sharedNodes.js";
+import { resolveLayer, loadSchemaNode, findLabelField } from "./sharedNodes.js";
 
 const QueryLayerState = Annotation.Root({
   userPrompt: Annotation(),
-  availableLayers: Annotation(),
   view: Annotation(),
   selectedLayerId: Annotation(),
   layer: Annotation(),
@@ -97,22 +96,12 @@ async function executeQueryNode(state) {
   return { resultText: `${heading}:<ul>${items}</ul>` };
 }
 
-function routeAfterSelectLayer(state) {
-  return state.resultText ? END : "loadSchema";
-}
-
-function routeAfterLoadSchema(state) {
-  return state.resultText ? END : "buildQuery";
-}
-
 const graph = new StateGraph(QueryLayerState)
-  .addNode("selectLayer", selectLayerNode)
   .addNode("loadSchema", loadSchemaNode)
   .addNode("buildQuery", buildQueryNode)
   .addNode("executeQuery", executeQueryNode)
-  .addEdge(START, "selectLayer")
-  .addConditionalEdges("selectLayer", routeAfterSelectLayer)
-  .addConditionalEdges("loadSchema", routeAfterLoadSchema)
+  .addEdge(START, "loadSchema")
+  .addConditionalEdges("loadSchema", (state) => (state.resultText ? END : "buildQuery"))
   .addEdge("buildQuery", "executeQuery")
   .addEdge("executeQuery", END);
 
@@ -125,6 +114,24 @@ export async function runQueryLayerGraph(view, userPrompt) {
     return "No hay ninguna capa operativa cargada en el mapa todavía.";
   }
 
-  const finalState = await queryLayerGraph.invoke({ userPrompt, availableLayers, view });
+  const layerResult = await resolveLayer(userPrompt, availableLayers);
+
+  if (layerResult.needsSelection) {
+    return {
+      needsInput: true,
+      question: "No he identificado con certeza a qué capa te refieres. ¿Cuál de estas es?",
+      options: layerResult.options,
+      resume: async (chosenLayerId) => {
+        const finalState = await queryLayerGraph.invoke({ userPrompt, view, selectedLayerId: chosenLayerId });
+        return finalState.resultText || "No he podido completar la consulta.";
+      }
+    };
+  }
+
+  const finalState = await queryLayerGraph.invoke({
+    userPrompt,
+    view,
+    selectedLayerId: layerResult.selectedLayerId
+  });
   return finalState.resultText || "No he podido completar la consulta.";
 }
