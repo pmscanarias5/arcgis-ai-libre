@@ -1,4 +1,5 @@
 import { callStructuredLLM } from "../llm/callStructuredLLM.js";
+import { ResolveCandidateSchema, SelectLayerSchema } from "../llm/schemas.js";
 
 export function normalize(str) {
   return (str || "")
@@ -61,14 +62,18 @@ Responde solo con JSON, sin texto adicional:
 export async function resolveAmbiguousValue(userPrompt, candidates) {
   if (candidates.length === 1) return candidates[0];
 
-  const disambiguation = await callStructuredLLM(RESOLVE_CANDIDATE_PROMPT, [
-    {
-      role: "user",
-      content: `Petición original: "${userPrompt}"\nCoincidencias encontradas: ${candidates
-        .map((c) => `"${c}"`)
-        .join(", ")}`
-    }
-  ]);
+  const disambiguation = await callStructuredLLM(
+    RESOLVE_CANDIDATE_PROMPT,
+    [
+      {
+        role: "user",
+        content: `Petición original: "${userPrompt}"\nCoincidencias encontradas: ${candidates
+          .map((c) => `"${c}"`)
+          .join(", ")}`
+      }
+    ],
+    ResolveCandidateSchema
+  );
 
   return candidates.includes(disambiguation?.match) ? disambiguation.match : candidates[0];
 }
@@ -92,7 +97,12 @@ export async function resolveLayer(userPrompt, availableLayers) {
   const layersDescription = availableLayers.map((l) => `- id: "${l.id}", título: "${l.title}"`).join("\n");
   const userContent = `Capas cargadas en el mapa:\n${layersDescription}\n\nPetición del usuario: "${userPrompt}"`;
 
-  const result = await callStructuredLLM(SELECT_LAYER_PROMPT, [{ role: "user", content: userContent }]);
+  const result = await callStructuredLLM(
+    SELECT_LAYER_PROMPT,
+    [{ role: "user", content: userContent }],
+    SelectLayerSchema
+  );
+
   const selectedLayerId = result?.layer_id ?? null;
 
   const isValid = availableLayers.some((l) => l.id === selectedLayerId);

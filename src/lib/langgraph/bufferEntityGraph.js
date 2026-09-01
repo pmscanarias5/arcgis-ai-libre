@@ -2,6 +2,7 @@ import { StateGraph, Annotation, START, END } from "@langchain/langgraph";
 import Graphic from "@arcgis/core/Graphic";
 import * as geometryEngine from "@arcgis/core/geometry/geometryEngine";
 import { callStructuredLLM } from "../llm/callStructuredLLM.js";
+import { ExtractSearchTextSchema } from "../llm/schemas.js";
 import {
   resolveLayer,
   loadSchemaNode,
@@ -41,7 +42,7 @@ async function buildEntityQueryNode(state) {
 
   const extraction = await callStructuredLLM(EXTRACT_SEARCH_TEXT_PROMPT, [
     { role: "user", content: `Petición del usuario: "${state.userPrompt}"` }
-  ]);
+  ], ExtractSearchTextSchema);
 
   const searchText = extraction?.search_text?.trim();
   const distanceKm = extraction?.distance_km || DEFAULT_DISTANCE_KM;

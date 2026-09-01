@@ -1,5 +1,6 @@
 import { StateGraph, Annotation, START, END } from "@langchain/langgraph";
 import { callStructuredLLM } from "../llm/callStructuredLLM.js";
+import { BuildQuerySchema } from "../llm/schemas.js";
 import {
   resolveLayer,
   loadSchemaNode,
@@ -107,7 +108,7 @@ async function buildQueryNode(state) {
     .join("\n");
 
   const userContent = `Campos disponibles en la capa "${state.layer.title}":\n${fieldsDescription}\n\nPetición del usuario: "${state.userPrompt}"`;
-  const result = await callStructuredLLM(BUILD_QUERY_PROMPT, [{ role: "user", content: userContent }]);
+  const result = await callStructuredLLM(BUILD_QUERY_PROMPT, [{ role: "user", content: userContent }], BuildQuerySchema);
 
   const metricField = result?.metric_field_hint ? findBestField(state.fields, result.metric_field_hint) : null;
   const order = result?.order === "asc" ? "asc" : "desc";

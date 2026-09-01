@@ -4,10 +4,16 @@ const API_KEY = import.meta.env.VITE_LLM_API_KEY || "";
 
 /**
  * Llamada de bajo nivel a un LLM compatible con la API chat/completions de
- * OpenAI, forzando una respuesta JSON. La reutilizan tanto el router de
- * intenciones (llmClient.js) como los nodos del grafo de LangGraph.
+ * OpenAI, forzando una respuesta JSON. Opcionalmente valida el resultado con
+ * un esquema Zod. La reutilizan tanto el router de intenciones como los nodos
+ * del grafo de LangGraph.
+ *
+ * @param {string} systemPrompt - Prompt del sistema
+ * @param {Array} messages - Mensajes de la conversación
+ * @param {object|null} schema - Esquema Zod opcional para validación
+ * @returns {object|null} Resultado parseado o null en error
  */
-export async function callStructuredLLM(systemPrompt, messages) {
+export async function callStructuredLLM(systemPrompt, messages, schema = null) {
   const response = await fetch(`${BASE_URL}/chat/completions`, {
     method: "POST",
     headers: {
@@ -30,10 +36,30 @@ export async function callStructuredLLM(systemPrompt, messages) {
   const raw = data.choices?.[0]?.message?.content ?? "";
   const cleaned = raw.replace(/```json|```/g, "").trim();
 
+  let result;
   try {
-    return JSON.parse(cleaned);
+    result = JSON.parse(cleaned);
   } catch (err) {
     console.error("Respuesta del modelo no es JSON válido:", raw);
     return null;
   }
+
+  // Validar con Zod si se proporcionó un esquema
+  if (schema) {
+    const parsed = schema.safeParse(result);
+    if (!parsed.success) {
+      console.warn("Validación Zod falló, intentando reparación:", parsed.error.format?._errors || parsed.error.message);
+      // Intentar reparar con un segundo llamado al LLM
+      const repairPrompt = systemPrompt +
+        "\n\nIMPORTANTE: Tu respuesta anterior no tenía el formato correcto. Responde EXACTAMENTE en este formato, sin texto adicional:\n" +
+        (schema._def.description || "JSON con las propiedades esperadas.");
+      const repaired = await callStructuredLLM(repairPrompt, messages, schema);
+      if (repaired) return repaired;
+      console.error("Reparación falló. Datos recibidos:", result);
+      return null;
+    }
+    return parsed.data;
+  }
+
+  return result;
 }

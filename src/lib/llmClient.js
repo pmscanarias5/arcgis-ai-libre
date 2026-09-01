@@ -1,4 +1,5 @@
 import { callStructuredLLM } from "./llm/callStructuredLLM.js";
+import { IntentSchema } from "./llm/schemas.js";
 
 const SYSTEM_PROMPT = `Eres el orquestador de un asistente de mapas GIS. Tu única salida debe ser un
   objeto JSON, sin texto adicional, sin markdown, sin explicaciones.
@@ -59,6 +60,6 @@ const SYSTEM_PROMPT = `Eres el orquestador de un asistente de mapas GIS. Tu úni
   opcional si el usuario lo menciona explícitamente; si no, usa null.`;
 
 export async function getIntent(userPrompt, history = []) {
-  const intent = await callStructuredLLM(SYSTEM_PROMPT, [...history, { role: "user", content: userPrompt }]);
+  const intent = await callStructuredLLM(SYSTEM_PROMPT, [...history, { role: "user", content: userPrompt }], IntentSchema);
   return intent || { action: "none", params: { reply: "No he podido interpretar la respuesta del modelo." } };
 }
