@@ -13,6 +13,7 @@ const SYSTEM_PROMPT = `Eres el orquestador de un asistente de mapas GIS. Tu úni
   {"action":"query_layer","params":{}}
   {"action":"buffer_entity","params":{}}
   {"action":"select_features","params":{}}
+  {"action":"clear_selection","params":{}}
   {"action":"none","params":{"reply":"<respuesta breve en español si no aplica ninguna acción>"}}
 
   Para "go_to_location" NO inventes coordenadas: solo extrae el texto de búsqueda tal
@@ -55,6 +56,11 @@ const SYSTEM_PROMPT = `Eres el orquestador de un asistente de mapas GIS. Tu úni
     Pista rápida: si la petición usa verbos como "selecciona", "marca", "resalta",
     "muéstrame en el mapa (los que...)" → "select_features". Si pregunta "cuál"/"cuántos"
     o pide "el más/menos" → "query_layer".
+
+  REGLA para elegir "clear_selection" (quitar la selección previa):
+  Usa "clear_selection" cuando el usuario pida quitar, borrar, limpiar o deseleccionar
+  una selección que hayas marcado antes en el mapa. Ejemplos: "quita la selección",
+  "borra lo seleccionado", "deselecciona los municipios de Madrid".
 
   REGLA para elegir la acción "buffer_entity" (área de influencia alrededor de un lugar concreto):
 

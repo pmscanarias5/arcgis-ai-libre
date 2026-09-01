@@ -71,7 +71,7 @@ async function executeSelectionNode(state) {
 
   const layerView = await view.whenLayerView(layer);
   const highlightHandle = layerView.highlight(objectIds);
-  setSelectionHighlight(layer.id, highlightHandle);
+  setSelectionHighlight(layer.id, layer.title, highlightHandle); // <- único cambio real
 
   const geometries = result.features.map((f) => f.geometry).filter(Boolean);
   if (geometries.length === 1) {

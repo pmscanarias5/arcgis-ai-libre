@@ -1,17 +1,27 @@
-// Guarda el "handle" del resaltado de selección activo por capa, para
-// poder limpiarlo antes de aplicar una nueva selección sobre esa misma
-// capa (si no, los resaltados anteriores se quedarían acumulados).
-const highlightHandles = new Map();
+// Guarda el "handle" del resaltado de selección activo por capa (junto con
+// su título, para mensajes y para desambiguar peticiones del chat), y
+// permite limpiar una capa concreta o todas a la vez.
+const highlightHandles = new Map(); // layerId -> { handle, layerTitle }
 
-export function setSelectionHighlight(layerId, handle) {
+export function setSelectionHighlight(layerId, layerTitle, handle) {
   clearSelectionHighlight(layerId);
-  highlightHandles.set(layerId, handle);
+  highlightHandles.set(layerId, { handle, layerTitle });
 }
 
 export function clearSelectionHighlight(layerId) {
   const existing = highlightHandles.get(layerId);
   if (existing) {
-    existing.remove();
+    existing.handle.remove();
     highlightHandles.delete(layerId);
   }
+}
+
+export function clearAllSelectionHighlights() {
+  for (const layerId of [...highlightHandles.keys()]) {
+    clearSelectionHighlight(layerId);
+  }
+}
+
+export function getActiveSelections() {
+  return [...highlightHandles.entries()].map(([layerId, { layerTitle }]) => ({ layerId, layerTitle }));
 }

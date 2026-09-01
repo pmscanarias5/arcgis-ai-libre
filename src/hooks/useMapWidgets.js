@@ -4,24 +4,27 @@ import LayerList from "@arcgis/core/widgets/LayerList";
 import BasemapGallery from "@arcgis/core/widgets/BasemapGallery";
 import Expand from "@arcgis/core/widgets/Expand";
 import Slider from "@arcgis/core/widgets/Slider";
+import { clearAllSelectionHighlights } from "../lib/mapActions/selectionState.js";
 
-/**
- * Añade los widgets básicos del SDK de ArcGIS a la vista:
- * - Zoom: botones de acercar/alejar.
- * - LayerList: panel de capas con checkbox de visibilidad, slider de
- *   transparencia por capa y acción para abrir la tabla de atributos.
- *   Colapsable, envuelto en un Expand (mismo patrón que BasemapGallery).
- * - BasemapGallery: selector visual de mapas base, dentro de un Expand.
- *
- * @param {import("@arcgis/core/views/MapView").default} view
- * @param {(layer: __esri.Layer) => void} onOpenTable
- */
 export function useMapWidgets(view, onOpenTable) {
   useEffect(() => {
     if (!view) return;
 
     const zoomWidget = new Zoom({ view });
     view.ui.add(zoomWidget, "top-left");
+
+    // Botón plano con las clases del propio SDK (esri-widget /
+    // esri-widget--button): hereda el estilo del tema oscuro sin CSS
+    // adicional, igual que Zoom o el resto de widgets nativos.
+    const clearSelectionButton = document.createElement("button");
+    clearSelectionButton.type = "button";
+    clearSelectionButton.className = "esri-widget esri-widget--button";
+    clearSelectionButton.title = "Quitar selección";
+    clearSelectionButton.innerHTML = '<span class="esri-icon esri-icon-trash" aria-hidden="true"></span>';
+    clearSelectionButton.addEventListener("click", () => {
+      clearAllSelectionHighlights();
+    });
+    view.ui.add(clearSelectionButton, "top-left");
 
     const layerListWidget = new LayerList({
       view,
@@ -86,6 +89,7 @@ export function useMapWidgets(view, onOpenTable) {
       triggerActionHandle.remove();
       view.ui.remove(zoomWidget);
       zoomWidget.destroy();
+      view.ui.remove(clearSelectionButton);
       view.ui.remove(layerListExpand);
       layerListExpand.destroy();
       layerListWidget.destroy();
