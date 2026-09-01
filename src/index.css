@@ -25,10 +25,55 @@ html, body, #root {
   color: var(--text-main);
 }
 
-.app-container {
+.app-shell {
   display: flex;
+  flex-direction: column;
   width: 100vw;
   height: 100vh;
+}
+
+.app-container {
+  display: flex;
+  flex: 1;
+  min-height: 0; /* necesario para que los hijos con overflow no desborden en flex column */
+}
+
+.attribute-table-panel {
+  height: 300px;
+  min-height: 300px;
+  background-color: var(--panel-bg);
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+}
+
+.attribute-table-header {
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-main);
+  font-size: 0.9rem;
+}
+
+.attribute-table-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.attribute-table-close:hover {
+  color: #fff;
+}
+
+.attribute-table-container {
+  flex: 1;
+  overflow: auto;
 }
 
 #viewDiv {

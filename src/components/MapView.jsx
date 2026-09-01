@@ -2,11 +2,11 @@ import { useEffect, useRef } from "react";
 import { useArcGISMap } from "../hooks/useArcGISMap.js";
 import { useMapWidgets } from "../hooks/useMapWidgets.js";
 
-export default function MapViewComponent({ onViewReady }) {
+export default function MapViewComponent({ onViewReady, onOpenTable }) {
   const containerRef = useRef(null);
   const { view, status } = useArcGISMap(containerRef);
 
-  useMapWidgets(view);
+  useMapWidgets(view, onOpenTable);
 
   useEffect(() => {
     if (view && onViewReady) {
@@ -17,6 +17,7 @@ export default function MapViewComponent({ onViewReady }) {
   return (
     <div style={{ flex: 1, height: "100%", position: "relative" }}>
       <div id="viewDiv" ref={containerRef} style={{ width: "100%", height: "100%" }} />
+
       {status === "loading" && (
         <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#809a9f", pointerEvents: "none" }}>
           Cargando mapa…
