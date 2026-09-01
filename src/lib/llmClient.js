@@ -12,6 +12,7 @@ const SYSTEM_PROMPT = `Eres el orquestador de un asistente de mapas GIS. Tu úni
   {"action":"print_map","params":{"title":"<título opcional para la impresión, o null>"}}
   {"action":"query_layer","params":{}}
   {"action":"buffer_entity","params":{}}
+  {"action":"select_features","params":{}}
   {"action":"none","params":{"reply":"<respuesta breve en español si no aplica ninguna acción>"}}
 
   Para "go_to_location" NO inventes coordenadas: solo extrae el texto de búsqueda tal
@@ -39,7 +40,22 @@ const SYSTEM_PROMPT = `Eres el orquestador de un asistente de mapas GIS. Tu úni
     "mínimo", "cuántos/as", o pide un ranking/comparación → es "query_layer".
     Si en cambio nombra directamente el lugar al que ir → es "go_to_location".
 
-  
+  REGLA para elegir "select_features" (marcar/resaltar entidades en el mapa) frente a
+    "query_layer" (responder una pregunta con datos):
+
+    - "select_features" es para cuando el usuario quiere VER resaltado en el mapa un
+      conjunto de entidades que cumplen una condición, sin pedir un ranking, un máximo/
+      mínimo ni un conteo. Ejemplos: "selecciona los municipios con más de 50000
+      habitantes", "marca las provincias con más de 5000 km2", "resalta los municipios
+      de la provincia de Málaga".
+
+    - "query_layer" sigue siendo para preguntas con respuesta (el mayor/menor, cuántos
+      hay, un ranking top-N).
+
+    Pista rápida: si la petición usa verbos como "selecciona", "marca", "resalta",
+    "muéstrame en el mapa (los que...)" → "select_features". Si pregunta "cuál"/"cuántos"
+    o pide "el más/menos" → "query_layer".
+
   REGLA para elegir la acción "buffer_entity" (área de influencia alrededor de un lugar concreto):
 
   - "buffer_entity" es para un buffer alrededor de una ENTIDAD CONCRETA de una

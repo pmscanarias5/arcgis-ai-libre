@@ -22,21 +22,12 @@ export function findLabelField(fields, displayFieldName) {
   );
 }
 
-// Busca entre los campos de la capa el que mejor coincide con una palabra
-// clave (p.ej. "poblacion" -> campo "POB_TOTAL", o "provincia" -> campo
-// "PROVINCIA"). Se usa para el campo métrica y el campo de filtro en
-// query_layer, y para el campo de nombre en buffer_entity.
 export function findBestField(fields, hint) {
   const target = normalize(hint);
   if (!target) return null;
   return fields.find((f) => normalize(f.name).includes(target) || normalize(f.alias).includes(target)) || null;
 }
 
-// Consulta valores reales y distintos de un campo de texto que contengan
-// searchText (sin acentos, sin distinguir mayúsculas). Nunca confiamos en
-// un valor "adivinado" por el LLM tal cual: se contrasta siempre contra lo
-// que existe de verdad en la capa. La usan tanto buffer_entity (para
-// localizar la entidad) como query_layer (para resolver un filtro).
 export async function searchDistinctValues(layer, field, searchText, { limit = 10 } = {}) {
   const safe = (searchText || "").replace(/'/g, "''");
   const query = layer.createQuery();
@@ -56,9 +47,6 @@ coincidencias es la que el usuario quería decir.
 Responde solo con JSON, sin texto adicional:
 {"match":"<uno de los valores de la lista, copiado EXACTAMENTE tal cual>"}`;
 
-// Si hay un único candidato real, se usa directo (sin gastar LLM). Si hay
-// varios, se le pide al LLM que elija entre ellos -sin inventar ninguno
-// nuevo-, usando la petición original como contexto de desambiguación.
 export async function resolveAmbiguousValue(userPrompt, candidates) {
   if (candidates.length === 1) return candidates[0];
 
@@ -78,6 +66,66 @@ export async function resolveAmbiguousValue(userPrompt, candidates) {
   return candidates.includes(disambiguation?.match) ? disambiguation.match : candidates[0];
 }
 
+// Tipos de campo de ArcGIS que representan números: para estos, el filtro
+// se construye como comparación numérica directa, nunca como LIKE de texto.
+const NUMERIC_FIELD_TYPES = ["small-integer", "integer", "single", "double", "long", "big-integer"];
+const VALID_OPERATORS = ["=", ">", ">=", "<", "<=", "!="];
+
+/**
+ * Construye una cláusula WHERE a partir de las pistas que ha dado el LLM
+ * (campo, valor, operador), resolviendo siempre contra el esquema y los
+ * datos REALES de la capa. La usan tanto query_layer (filtro adicional a
+ * su métrica) como select_features (condición de selección completa).
+ *
+ * - Si el campo es numérico: comparación directa con el operador dado.
+ * - Si el campo es de texto: se buscan candidatos reales que contengan el
+ *   valor, se desambigua con el LLM si hay varios, y se usa "=" exacto.
+ * - Si no hay pistas suficientes o no encajan con ningún campo real,
+ *   devuelve whereClause: null (nunca inventa un filtro).
+ */
+export async function resolveFilters(state, filters) {
+  if (!Array.isArray(filters) || filters.length === 0) {
+    return { whereClause: null, filterDescription: null };
+  }
+
+  const clauses = [];
+  const descriptions = [];
+
+  for (const filter of filters) {
+    const fieldHint = filter?.field_hint;
+    const valueHint = filter?.value_hint;
+    if (!fieldHint || valueHint == null) continue;
+
+    const filterField = findBestField(state.fields, fieldHint);
+    if (!filterField) continue;
+
+    if (NUMERIC_FIELD_TYPES.includes(filterField.type)) {
+      const numericValue = Number(valueHint);
+      if (Number.isNaN(numericValue)) continue;
+      const operator = VALID_OPERATORS.includes(filter.operator) ? filter.operator : "=";
+      clauses.push(`${filterField.name} ${operator} ${numericValue}`);
+      descriptions.push(`${filterField.alias || filterField.name} ${operator} ${numericValue}`);
+      continue;
+    }
+
+    const candidates = await searchDistinctValues(state.layer, filterField, valueHint);
+    if (candidates.length === 0) continue;
+    const resolvedValue = await resolveAmbiguousValue(state.userPrompt, candidates);
+    const safe = resolvedValue.replace(/'/g, "''");
+    clauses.push(`${filterField.name} = '${safe}'`);
+    descriptions.push(`${filterField.alias || filterField.name} = ${resolvedValue}`);
+  }
+
+  if (clauses.length === 0) {
+    return { whereClause: null, filterDescription: null };
+  }
+
+  return {
+    whereClause: clauses.join(" AND "),
+    filterDescription: descriptions.join(", ")
+  };
+}
+
 const SELECT_LAYER_PROMPT = `Eres un asistente que identifica a qué capa geográfica se refiere una
 petición del usuario, eligiendo EXCLUSIVAMENTE entre una lista de capas que están
 realmente cargadas en el mapa. No inventes capas que no estén en la lista.
@@ -88,11 +136,6 @@ Responde solo con JSON, sin texto adicional:
 {"layer_id":"<id exacto de la lista>"} si encuentras una coincidencia razonable
 {"layer_id":null} si ninguna capa de la lista encaja con la petición`;
 
-// Decide qué capa usar. Función normal (no nodo de LangGraph, no usa
-// interrupt): la llaman runQueryLayerGraph y runBufferEntityGraph antes de
-// construir/ejecutar su StateGraph. Devuelve { selectedLayerId } si el LLM
-// decide con confianza, o { needsSelection: true, options } si hace falta
-// preguntar al usuario.
 export async function resolveLayer(userPrompt, availableLayers) {
   const layersDescription = availableLayers.map((l) => `- id: "${l.id}", título: "${l.title}"`).join("\n");
   const userContent = `Capas cargadas en el mapa:\n${layersDescription}\n\nPetición del usuario: "${userPrompt}"`;
@@ -112,8 +155,6 @@ export async function resolveLayer(userPrompt, availableLayers) {
   return { selectedLayerId };
 }
 
-// Nodo de LangGraph: carga el esquema real de campos de la capa ya
-// elegida. Requiere en el estado: view, selectedLayerId.
 export async function loadSchemaNode(state) {
   const layer = state.view.map.layers.find((l) => l.id === state.selectedLayerId);
   if (!layer) {

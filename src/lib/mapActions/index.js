@@ -4,6 +4,7 @@ import { goToLocation } from "./goToLocation.js";
 import { queryLayer } from "./queryLayer.js";
 import { printMap } from "./printMap.js";
 import { bufferEntity } from "./bufferEntity.js";
+import { selectFeatures } from "./selectFeatures.js";
 import { none } from "./none.js";
 
 // Registro de acciones disponibles. Cada una recibe (view, params) y
@@ -17,5 +18,6 @@ export const mapActions = {
   query_layer: queryLayer,
   print_map: printMap,
   buffer_entity: bufferEntity,
+  select_features: selectFeatures,
   none
 };

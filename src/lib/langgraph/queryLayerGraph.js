@@ -6,8 +6,7 @@ import {
   loadSchemaNode,
   findLabelField,
   findBestField,
-  searchDistinctValues,
-  resolveAmbiguousValue
+  resolveFilters
 } from "./sharedNodes.js";
 
 const QueryLayerState = Annotation.Root({
@@ -25,10 +24,6 @@ const QueryLayerState = Annotation.Root({
   resultText: Annotation()
 });
 
-// Tipos de campo de ArcGIS que representan números: para estos, el filtro
-// se construye como comparación numérica directa, nunca como LIKE de texto.
-const NUMERIC_FIELD_TYPES = ["small-integer", "integer", "single", "double", "long", "big-integer"];
-const VALID_OPERATORS = ["=", ">", ">=", "<", "<=", "!="];
 
 const BUILD_QUERY_PROMPT = `Eres un asistente que construye los parámetros de una consulta de
 atributos sobre una capa GIS, a partir de su esquema real de campos. No inventes
@@ -41,66 +36,26 @@ Responde solo con JSON, sin texto adicional:
   "metric_field_hint":"<palabra clave del campo a analizar, o null si solo se pide contar>",
   "order":"desc|asc",
   "limit":<num entre 1 y 10>,
-  "filter_field_hint":"<palabra clave de un campo por el que FILTRAR los resultados, o null>",
-  "filter_value_hint":"<valor por el que filtrar ese campo, o null>",
-  "filter_operator":"=|>|>=|<|<=|!=|null"
+  "filters":[{"field_hint":"<palabra clave del campo>","value_hint":"<valor>","operator":"=|>|>=|<|<=|!="}]
 }
 
-filter_operator indica cómo comparar filter_value_hint con el campo de filtro:
-usa ">" para "más de"/"por encima de", ">=" para "al menos"/"mínimo", "<" para
-"menos de"/"por debajo de", "<=" para "como mucho"/"máximo", "=" para una
-coincidencia exacta o un nombre de texto (una provincia, un municipio...), y null
-si la petición no filtra nada.
+"filters" es una lista de condiciones que restringen los resultados, combinadas
+SIEMPRE con AND. Puede tener 0, 1 o varias condiciones: usa un elemento por cada
+restricción independiente que mencione la petición, no las mezcles en una sola.
 
 Ejemplo: "el municipio más poblado con altitud de más de 1000 metros" ->
-metric_field_hint:"poblacion", filter_field_hint:"altura", filter_value_hint:"1000",
-filter_operator:">".
+metric_field_hint:"poblacion", filters:[{"field_hint":"altura","value_hint":"1000","operator":">"}]
 
-Ejemplo: "el municipio más poblado de la provincia de Málaga" ->
-metric_field_hint:"poblacion", filter_field_hint:"provincia", filter_value_hint:"Malaga",
-filter_operator:"=".
+Ejemplo: "el municipio más poblado de la provincia de Málaga con más de 1000m de altitud" ->
+metric_field_hint:"poblacion", filters:[
+  {"field_hint":"provincia","value_hint":"Malaga","operator":"="},
+  {"field_hint":"altura","value_hint":"1000","operator":">"}
+]
 
 "order" es "desc" para el valor mayor (más poblado, máximo) o "asc" para el menor.
 Por defecto "desc" y limit 1.`;
 
-async function resolveFilter(state, result) {
-  if (!result?.filter_field_hint || result?.filter_value_hint == null) {
-    return { whereClause: null, filterDescription: null };
-  }
 
-  const filterField = findBestField(state.fields, result.filter_field_hint);
-  if (!filterField) {
-    // No hay campo real que encaje con la pista del LLM: seguimos sin
-    // filtro en vez de fallar del todo.
-    return { whereClause: null, filterDescription: null };
-  }
-
-  // Campo numérico: comparación directa, nunca LIKE de texto.
-  if (NUMERIC_FIELD_TYPES.includes(filterField.type)) {
-    const numericValue = Number(result.filter_value_hint);
-    if (Number.isNaN(numericValue)) {
-      return { whereClause: null, filterDescription: null };
-    }
-    const operator = VALID_OPERATORS.includes(result.filter_operator) ? result.filter_operator : "=";
-    return {
-      whereClause: `${filterField.name} ${operator} ${numericValue}`,
-      filterDescription: `${filterField.alias || filterField.name} ${operator} ${numericValue}`
-    };
-  }
-
-  // Campo de texto: se mantiene el flujo anterior, contrastando contra
-  // valores reales de la capa antes de usar "=" exacto.
-  const candidates = await searchDistinctValues(state.layer, filterField, result.filter_value_hint);
-  if (candidates.length === 0) {
-    return { whereClause: null, filterDescription: null };
-  }
-  const resolvedValue = await resolveAmbiguousValue(state.userPrompt, candidates);
-  const safe = resolvedValue.replace(/'/g, "''");
-  return {
-    whereClause: `${filterField.name} = '${safe}'`,
-    filterDescription: `${filterField.alias || filterField.name} = ${resolvedValue}`
-  };
-}
 
 async function buildQueryNode(state) {
   const fieldsDescription = state.fields
@@ -115,7 +70,7 @@ async function buildQueryNode(state) {
   const limit = Math.max(1, Math.min(result?.limit || 1, 10));
   const labelField = findLabelField(state.fields, state.layer.displayField);
 
-  const { whereClause: filterClause, filterDescription } = await resolveFilter(state, result);
+  const { whereClause: filterClause, filterDescription } = await resolveFilters(state, result?.filters);
 
   const baseClause = metricField ? `${metricField.name} IS NOT NULL` : "1=1";
   const whereClause = filterClause ? `${baseClause} AND ${filterClause}` : baseClause;
