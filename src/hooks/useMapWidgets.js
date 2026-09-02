@@ -4,7 +4,13 @@ import LayerList from "@arcgis/core/widgets/LayerList";
 import BasemapGallery from "@arcgis/core/widgets/BasemapGallery";
 import Expand from "@arcgis/core/widgets/Expand";
 import Slider from "@arcgis/core/widgets/Slider";
-import { clearAllSelectionHighlights } from "../lib/mapActions/selectionState.js";
+import Search from "@arcgis/core/widgets/Search";
+import LocatorSearchSource from "@arcgis/core/widgets/Search/LocatorSearchSource";
+import { clearAllSelectionHighlights, onSelectionChange } from "../lib/mapActions/selectionState.js";
+
+const GEOCODER_URL =
+  import.meta.env.VITE_GEOCODER_URL ||
+  "https://nco.ign.es/geocoder/rest/services/geocoder/GeocodeServer";
 
 export function useMapWidgets(view, onOpenTable) {
   useEffect(() => {
@@ -18,13 +24,31 @@ export function useMapWidgets(view, onOpenTable) {
     // adicional, igual que Zoom o el resto de widgets nativos.
     const clearSelectionButton = document.createElement("button");
     clearSelectionButton.type = "button";
-    clearSelectionButton.className = "esri-widget esri-widget--button";
+    clearSelectionButton.className = "esri-widget esri-widget--button clear-selection-button";
     clearSelectionButton.title = "Quitar selección";
     clearSelectionButton.innerHTML = '<span class="esri-icon esri-icon-trash" aria-hidden="true"></span>';
     clearSelectionButton.addEventListener("click", () => {
       clearAllSelectionHighlights();
     });
     view.ui.add(clearSelectionButton, "top-left");
+
+    const removeSelectionChangeListener = onSelectionChange((hasSelection) => {
+      clearSelectionButton.classList.toggle("has-selection", hasSelection);
+    });
+
+    const searchWidget = new Search({
+      view,
+      includeDefaultSources: false,
+      sources: [
+        new LocatorSearchSource({
+          url: GEOCODER_URL,
+          singleLineFieldName: "SingleLine",
+          name: "Geocoder IGN",
+          placeholder: "Buscar dirección o lugar..."
+        })
+      ]
+    });
+    view.ui.add(searchWidget, "top-right");
 
     const layerListWidget = new LayerList({
       view,
@@ -89,7 +113,10 @@ export function useMapWidgets(view, onOpenTable) {
       triggerActionHandle.remove();
       view.ui.remove(zoomWidget);
       zoomWidget.destroy();
+      removeSelectionChangeListener();
       view.ui.remove(clearSelectionButton);
+      view.ui.remove(searchWidget);
+      searchWidget.destroy();
       view.ui.remove(layerListExpand);
       layerListExpand.destroy();
       layerListWidget.destroy();

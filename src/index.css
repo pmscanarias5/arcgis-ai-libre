@@ -238,6 +238,14 @@ html, body, #root {
   cursor: not-allowed;
 }
 
+.clear-selection-button.has-selection {
+  color: var(--accent-teal);
+}
+
+.clear-selection-button.has-selection:hover {
+  color: var(--accent-hover);
+}
+
 @media (max-width: 768px) {
   .app-container {
     flex-direction: column-reverse;

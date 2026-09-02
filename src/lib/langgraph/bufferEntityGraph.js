@@ -30,6 +30,7 @@ de búsqueda aproximado para localizar una entidad geográfica, y la distancia d
 en kilómetros. No tienes que acertar el nombre exacto: solo un fragmento razonable
 que probablemente aparezca en el dato real (puedes omitir tildes o palabras genéricas
 como "municipio de").
+En el caso de los ríos, debes usar el nombre del río directamente, por ejemplo quedate únicamente con "Ebro" o "Duero", aunque se te diga río Ebro o río Duero.
 
 Responde solo con JSON, sin texto adicional:
 {"search_text":"<fragmento de búsqueda>","distance_km":<num, o null si no se menciona>}`;
