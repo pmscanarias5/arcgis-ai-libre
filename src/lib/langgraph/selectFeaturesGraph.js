@@ -2,6 +2,7 @@ import { StateGraph, Annotation, START, END } from "@langchain/langgraph";
 import { callStructuredLLM } from "../llm/callStructuredLLM.js";
 import { SelectFeaturesSchema } from "../llm/schemas.js";
 import { resolveLayer, loadSchemaNode, resolveFilters, findBestField } from "./sharedNodes.js";
+import { getLayerProfile, describeFieldsForPrompt } from "./layerCatalog.js";
 import { setSelectionHighlight } from "../mapActions/selectionState.js";
 
 const SelectFeaturesState = Annotation.Root({
@@ -78,9 +79,8 @@ metric_field_hint:"longitud", order:"desc", limit:2, filter_groups:[]
 "order" es "desc" para el valor mayor (más largo, más poblado) o "asc" para el menor.`;
 
 async function buildSelectionNode(state) {
-  const fieldsDescription = state.fields
-    .map((f) => `- ${f.name} (alias: "${f.alias}", tipo: ${f.type})`)
-    .join("\n");
+  const profile = await getLayerProfile(state.layer);
+  const fieldsDescription = describeFieldsForPrompt(profile);
 
   const userContent = `Campos disponibles en la capa "${state.layer.title}":\n${fieldsDescription}\n\nPetición del usuario: "${state.userPrompt}"`;
   const result = await callStructuredLLM(SELECT_FEATURES_PROMPT, [{ role: "user", content: userContent }], SelectFeaturesSchema);
@@ -155,7 +155,7 @@ const graph = new StateGraph(SelectFeaturesState)
 const selectFeaturesGraph = graph.compile();
 
 export async function runSelectFeaturesGraph(view, userPrompt) {
-  const availableLayers = view.map.layers.toArray().map((l) => ({ id: l.id, title: l.title }));
+  const availableLayers = view.map.layers.toArray();
 
   if (availableLayers.length === 0) {
     return "No hay ninguna capa operativa cargada en el mapa todavía.";

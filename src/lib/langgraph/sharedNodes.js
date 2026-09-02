@@ -1,5 +1,6 @@
 import { callStructuredLLM } from "../llm/callStructuredLLM.js";
 import { ResolveCandidateSchema, SelectLayerSchema } from "../llm/schemas.js";
+import { describeLayersForPrompt } from "./layerCatalog.js";
 
 export function normalize(str) {
   return (str || "")
@@ -168,15 +169,26 @@ export async function resolveFilters(state, filterGroups) {
 const SELECT_LAYER_PROMPT = `Eres un asistente que identifica a qué capa geográfica se refiere una
 petición del usuario, eligiendo EXCLUSIVAMENTE entre una lista de capas que están
 realmente cargadas en el mapa. No inventes capas que no estén en la lista.
-Ten en cuenta en el prompt de usuario la entidad que se indica para hacer una valoración de que tipo de capa puede ser la más adecuada.
-La capa de ríos tiene las siguientes entidades: Ebro, Duero, Tajo, Guadalquivir, Júcar, Segura, Miño y Guadiana.
+Cada capa incluye su tipo de geometría y, cuando están disponibles, ejemplos reales
+de sus datos: úsalos para razonar qué capa encaja mejor (p.ej. si la petición
+menciona "el Tajo" y una capa tiene entre sus ejemplos "Tajo", es esa capa), no
+te quedes solo con el título.
 
 Responde solo con JSON, sin texto adicional:
 {"layer_id":"<id exacto de la lista>"} si encuentras una coincidencia razonable
 {"layer_id":null} si ninguna capa de la lista encaja con la petición`;
 
-export async function resolveLayer(userPrompt, availableLayers) {
-  const layersDescription = availableLayers.map((l) => `- id: "${l.id}", título: "${l.title}"`).join("\n");
+/**
+ * Decide a qué capa se refiere la petición. Recibe las instancias reales de
+ * capa (no solo {id, title}), porque necesita perfilarlas para dar contexto
+ * de datos reales al LLM (ver layerCatalog.js). Devuelve { selectedLayerId }
+ * si el LLM decide con confianza, o { needsSelection: true, options } (con
+ * options ya en forma serializable {id, title}, la que consume la UI del
+ * chat) si hace falta preguntar al usuario.
+ */
+export async function resolveLayer(userPrompt, layers) {
+  const options = layers.map((l) => ({ id: l.id, title: l.title }));
+  const layersDescription = await describeLayersForPrompt(layers);
   const userContent = `Capas cargadas en el mapa:\n${layersDescription}\n\nPetición del usuario: "${userPrompt}"`;
 
   const result = await callStructuredLLM(
@@ -187,9 +199,9 @@ export async function resolveLayer(userPrompt, availableLayers) {
 
   const selectedLayerId = result?.layer_id ?? null;
 
-  const isValid = availableLayers.some((l) => l.id === selectedLayerId);
+  const isValid = options.some((l) => l.id === selectedLayerId);
   if (!isValid) {
-    return { needsSelection: true, options: availableLayers };
+    return { needsSelection: true, options };
   }
   return { selectedLayerId };
 }

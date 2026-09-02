@@ -8,6 +8,7 @@ import {
   findBestField,
   resolveFilters
 } from "./sharedNodes.js";
+import { getLayerProfile, describeFieldsForPrompt } from "./layerCatalog.js";
 
 const QueryLayerState = Annotation.Root({
   userPrompt: Annotation(),
@@ -82,9 +83,8 @@ Por defecto "desc" y limit 1.`;
 
 
 async function buildQueryNode(state) {
-  const fieldsDescription = state.fields
-    .map((f) => `- ${f.name} (alias: "${f.alias}", tipo: ${f.type})`)
-    .join("\n");
+  const profile = await getLayerProfile(state.layer);
+  const fieldsDescription = describeFieldsForPrompt(profile);
 
   const userContent = `Campos disponibles en la capa "${state.layer.title}":\n${fieldsDescription}\n\nPetición del usuario: "${state.userPrompt}"`;
   const result = await callStructuredLLM(BUILD_QUERY_PROMPT, [{ role: "user", content: userContent }], BuildQuerySchema);
@@ -168,7 +168,7 @@ const graph = new StateGraph(QueryLayerState)
 const queryLayerGraph = graph.compile();
 
 export async function runQueryLayerGraph(view, userPrompt) {
-  const availableLayers = view.map.layers.toArray().map((l) => ({ id: l.id, title: l.title }));
+  const availableLayers = view.map.layers.toArray();
 
   if (availableLayers.length === 0) {
     return "No hay ninguna capa operativa cargada en el mapa todavía.";

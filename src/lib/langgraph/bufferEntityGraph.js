@@ -110,7 +110,7 @@ const graph = new StateGraph(BufferEntityState)
 const bufferEntityGraph = graph.compile();
 
 export async function runBufferEntityGraph(view, userPrompt) {
-  const availableLayers = view.map.layers.toArray().map((l) => ({ id: l.id, title: l.title }));
+  const availableLayers = view.map.layers.toArray();
 
   if (availableLayers.length === 0) {
     return "No hay ninguna capa operativa cargada en el mapa todavía.";
