@@ -13,12 +13,19 @@ export const ResolveCandidateSchema = z.object({
 export const SelectLayerSchema = z.object({
   layer_id: z.string().nullable()
 });
-const FilterSchema = z.object({
+const FilterConditionSchema = z.object({
   field_hint: z.string(),
   value_hint: z.string().nullable(),
   operator: z.enum(["=", ">", ">=", "<", "<=", "!="]).nullable()
 });
 
+// Un grupo de condiciones combinadas SIEMPRE con AND. Los distintos grupos de
+// la lista "filter_groups" se combinan entre sí con OR, lo que permite
+// expresar cualquier condición booleana en forma normal disyuntiva (OR de
+// ANDs) sin que el LLM tenga que anidar árboles de booleanos.
+const FilterGroupSchema = z.object({
+  conditions: z.array(FilterConditionSchema).max(3)
+});
 
 /**
  * Esquema para construir una consulta de capa (query_layer).
@@ -27,7 +34,7 @@ export const BuildQuerySchema = z.object({
   metric_field_hint: z.string().nullable(),
   order: z.enum(["asc", "desc"]),
   limit: z.number().min(1).max(10),
-  filters: z.array(FilterSchema).max(3)
+  filter_groups: z.array(FilterGroupSchema).max(3)
 });
 
 
@@ -44,7 +51,7 @@ export const SelectFeaturesSchema = z.object({
   metric_field_hint: z.string().nullable(),
   order: z.enum(["asc", "desc"]).nullable(),
   limit: z.number().min(1).max(50).nullable(),
-  filters: z.array(FilterSchema).max(3)
+  filter_groups: z.array(FilterGroupSchema).max(3)
 });
 
 

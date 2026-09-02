@@ -71,59 +71,98 @@ export async function resolveAmbiguousValue(userPrompt, candidates) {
 const NUMERIC_FIELD_TYPES = ["small-integer", "integer", "single", "double", "long", "big-integer"];
 const VALID_OPERATORS = ["=", ">", ">=", "<", "<=", "!="];
 
+async function resolveCondition(state, filter) {
+  const fieldHint = filter?.field_hint;
+  const valueHint = filter?.value_hint;
+  if (!fieldHint || valueHint == null) return null;
+
+  const filterField = findBestField(state.fields, fieldHint);
+  if (!filterField) return null;
+
+  if (NUMERIC_FIELD_TYPES.includes(filterField.type)) {
+    const numericValue = Number(valueHint);
+    if (Number.isNaN(numericValue)) return null;
+    const operator = VALID_OPERATORS.includes(filter.operator) ? filter.operator : "=";
+    return {
+      clause: `${filterField.name} ${operator} ${numericValue}`,
+      description: `${filterField.alias || filterField.name} ${operator} ${numericValue}`
+    };
+  }
+
+  const candidates = await searchDistinctValues(state.layer, filterField, valueHint);
+  if (candidates.length === 0) return null;
+  const resolvedValue = await resolveAmbiguousValue(state.userPrompt, candidates);
+  const safe = resolvedValue.replace(/'/g, "''");
+  return {
+    clause: `${filterField.name} = '${safe}'`,
+    description: `${filterField.alias || filterField.name} = ${resolvedValue}`
+  };
+}
+
+// Un grupo son condiciones combinadas con AND entre sí.
+async function resolveConditionGroup(state, conditions) {
+  if (!Array.isArray(conditions) || conditions.length === 0) return null;
+
+  const clauses = [];
+  const descriptions = [];
+  for (const condition of conditions) {
+    const resolved = await resolveCondition(state, condition);
+    if (!resolved) continue;
+    clauses.push(resolved.clause);
+    descriptions.push(resolved.description);
+  }
+
+  if (clauses.length === 0) return null;
+  return { clause: clauses.join(" AND "), description: descriptions.join(", ") };
+}
+
 /**
  * Construye una cláusula WHERE a partir de las pistas que ha dado el LLM
  * (campo, valor, operador), resolviendo siempre contra el esquema y los
  * datos REALES de la capa. La usan tanto query_layer (filtro adicional a
  * su métrica) como select_features (condición de selección completa).
  *
- * - Si el campo es numérico: comparación directa con el operador dado.
- * - Si el campo es de texto: se buscan candidatos reales que contengan el
+ * "filterGroups" es una lista de grupos: las condiciones DENTRO de un mismo
+ * grupo se combinan con AND, y los distintos grupos se combinan entre sí con
+ * OR (forma normal disyuntiva), lo que permite expresar condiciones como
+ * "provincia = Madrid o provincia = Barcelona" o combinaciones más complejas
+ * tipo "(provincia = Sevilla AND poblacion > 50000) OR provincia = Cádiz".
+ *
+ * - Si un campo es numérico: comparación directa con el operador dado.
+ * - Si un campo es de texto: se buscan candidatos reales que contengan el
  *   valor, se desambigua con el LLM si hay varios, y se usa "=" exacto.
- * - Si no hay pistas suficientes o no encajan con ningún campo real,
- *   devuelve whereClause: null (nunca inventa un filtro).
+ * - Si no hay pistas suficientes o no encajan con ningún campo real, esa
+ *   condición/grupo se descarta (nunca se inventa un filtro); si no queda
+ *   ningún grupo válido, devuelve whereClause: null.
  */
-export async function resolveFilters(state, filters) {
-  if (!Array.isArray(filters) || filters.length === 0) {
+export async function resolveFilters(state, filterGroups) {
+  if (!Array.isArray(filterGroups) || filterGroups.length === 0) {
     return { whereClause: null, filterDescription: null };
   }
 
-  const clauses = [];
-  const descriptions = [];
+  const groupClauses = [];
+  const groupDescriptions = [];
 
-  for (const filter of filters) {
-    const fieldHint = filter?.field_hint;
-    const valueHint = filter?.value_hint;
-    if (!fieldHint || valueHint == null) continue;
-
-    const filterField = findBestField(state.fields, fieldHint);
-    if (!filterField) continue;
-
-    if (NUMERIC_FIELD_TYPES.includes(filterField.type)) {
-      const numericValue = Number(valueHint);
-      if (Number.isNaN(numericValue)) continue;
-      const operator = VALID_OPERATORS.includes(filter.operator) ? filter.operator : "=";
-      clauses.push(`${filterField.name} ${operator} ${numericValue}`);
-      descriptions.push(`${filterField.alias || filterField.name} ${operator} ${numericValue}`);
-      continue;
-    }
-
-    const candidates = await searchDistinctValues(state.layer, filterField, valueHint);
-    if (candidates.length === 0) continue;
-    const resolvedValue = await resolveAmbiguousValue(state.userPrompt, candidates);
-    const safe = resolvedValue.replace(/'/g, "''");
-    clauses.push(`${filterField.name} = '${safe}'`);
-    descriptions.push(`${filterField.alias || filterField.name} = ${resolvedValue}`);
+  for (const group of filterGroups) {
+    const resolved = await resolveConditionGroup(state, group?.conditions);
+    if (!resolved) continue;
+    groupClauses.push(resolved.clause);
+    groupDescriptions.push(resolved.description);
   }
 
-  if (clauses.length === 0) {
+  if (groupClauses.length === 0) {
     return { whereClause: null, filterDescription: null };
   }
 
-  return {
-    whereClause: clauses.join(" AND "),
-    filterDescription: descriptions.join(", ")
-  };
+  const whereClause =
+    groupClauses.length === 1 ? groupClauses[0] : groupClauses.map((c) => `(${c})`).join(" OR ");
+
+  const filterDescription =
+    groupDescriptions.length === 1
+      ? groupDescriptions[0]
+      : groupDescriptions.map((d) => `(${d})`).join(" o ");
+
+  return { whereClause, filterDescription };
 }
 
 const SELECT_LAYER_PROMPT = `Eres un asistente que identifica a qué capa geográfica se refiere una

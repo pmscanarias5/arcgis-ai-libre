@@ -36,20 +36,44 @@ Responde solo con JSON, sin texto adicional:
   "metric_field_hint":"<palabra clave del campo a analizar, o null si solo se pide contar>",
   "order":"desc|asc",
   "limit":<num entre 1 y 10>,
-  "filters":[{"field_hint":"<palabra clave del campo>","value_hint":"<valor>","operator":"=|>|>=|<|<=|!="}]
+  "filter_groups":[{"conditions":[{"field_hint":"<palabra clave del campo>","value_hint":"<valor>","operator":"=|>|>=|<|<=|!="}]}]
 }
 
-"filters" es una lista de condiciones que restringen los resultados, combinadas
-SIEMPRE con AND. Puede tener 0, 1 o varias condiciones: usa un elemento por cada
-restricción independiente que mencione la petición, no las mezcles en una sola.
+"filter_groups" es una lista de grupos de condiciones que restringen los resultados.
+Las condiciones DENTRO de un mismo grupo se combinan con AND. Los distintos grupos
+se combinan entre sí con OR: usa varios grupos solo cuando la petición tenga una
+disyunción real (un "o" que amplía las opciones). Si no hay ningún "o", usa un
+único grupo con todas las condiciones.
 
 Ejemplo: "el municipio más poblado con altitud de más de 1000 metros" ->
-metric_field_hint:"poblacion", filters:[{"field_hint":"altura","value_hint":"1000","operator":">"}]
+metric_field_hint:"poblacion", filter_groups:[
+  {"conditions":[{"field_hint":"altura","value_hint":"1000","operator":">"}]}
+]
 
 Ejemplo: "el municipio más poblado de la provincia de Málaga con más de 1000m de altitud" ->
-metric_field_hint:"poblacion", filters:[
-  {"field_hint":"provincia","value_hint":"Malaga","operator":"="},
-  {"field_hint":"altura","value_hint":"1000","operator":">"}
+metric_field_hint:"poblacion", filter_groups:[
+  {"conditions":[
+    {"field_hint":"provincia","value_hint":"Malaga","operator":"="},
+    {"field_hint":"altura","value_hint":"1000","operator":">"}
+  ]}
+]
+
+Ejemplo (disyunción con "o"): "el municipio más poblado de Madrid o de Barcelona" ->
+metric_field_hint:"poblacion", filter_groups:[
+  {"conditions":[{"field_hint":"provincia","value_hint":"Madrid","operator":"="}]},
+  {"conditions":[{"field_hint":"provincia","value_hint":"Barcelona","operator":"="}]}
+]
+
+Ejemplo (OR combinado con AND): "municipios de Sevilla con más de 50000 habitantes o
+de Cádiz con más de 20000 habitantes" -> filter_groups:[
+  {"conditions":[
+    {"field_hint":"provincia","value_hint":"Sevilla","operator":"="},
+    {"field_hint":"poblacion","value_hint":"50000","operator":">"}
+  ]},
+  {"conditions":[
+    {"field_hint":"provincia","value_hint":"Cadiz","operator":"="},
+    {"field_hint":"poblacion","value_hint":"20000","operator":">"}
+  ]}
 ]
 
 "order" es "desc" para el valor mayor (más poblado, máximo) o "asc" para el menor.
@@ -70,7 +94,7 @@ async function buildQueryNode(state) {
   const limit = Math.max(1, Math.min(result?.limit || 1, 10));
   const labelField = findLabelField(state.fields, state.layer.displayField);
 
-  const { whereClause: filterClause, filterDescription } = await resolveFilters(state, result?.filters);
+  const { whereClause: filterClause, filterDescription } = await resolveFilters(state, result?.filter_groups);
 
   const baseClause = metricField ? `${metricField.name} IS NOT NULL` : "1=1";
   const whereClause = filterClause ? `${baseClause} AND ${filterClause}` : baseClause;

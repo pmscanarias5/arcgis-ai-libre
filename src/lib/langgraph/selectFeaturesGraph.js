@@ -28,28 +28,52 @@ Responde solo con JSON, sin texto adicional:
   "metric_field_hint":"<palabra clave del campo a ordenar, o null si no se pide un ranking>",
   "order":"desc|asc",
   "limit":<num entre 1 y 50, o null si no se pide un top-N>,
-  "filters":[{"field_hint":"<palabra clave del campo>","value_hint":"<valor>","operator":"=|>|>=|<|<=|!="}]
+  "filter_groups":[{"conditions":[{"field_hint":"<palabra clave del campo>","value_hint":"<valor>","operator":"=|>|>=|<|<=|!="}]}]
 }
 
-"filters" es una lista de condiciones combinadas SIEMPRE con AND. Usa un elemento
-por cada restricción independiente que mencione la petición, no las mezcles en una
-sola. Puede ir vacía si la selección es puramente un ranking (ver más abajo).
+"filter_groups" es una lista de grupos de condiciones. Las condiciones DENTRO de
+un mismo grupo se combinan con AND. Los distintos grupos se combinan entre sí con
+OR: usa varios grupos solo cuando la petición tenga una disyunción real (un "o"
+que amplía las opciones). Si no hay ningún "o", usa un único grupo con todas las
+condiciones. Puede ir vacía si la selección es puramente un ranking (ver más abajo).
 
 Ejemplo: "selecciona los municipios con más de 50000 habitantes" ->
-metric_field_hint:null, limit:null, filters:[{"field_hint":"poblacion","value_hint":"50000","operator":">"}]
+metric_field_hint:null, limit:null, filter_groups:[
+  {"conditions":[{"field_hint":"poblacion","value_hint":"50000","operator":">"}]}
+]
 
 Ejemplo: "selecciona los municipios de la comunidad de madrid con más de 5000 habitantes" ->
-metric_field_hint:null, limit:null, filters:[
-  {"field_hint":"provincia","value_hint":"Madrid","operator":"="},
-  {"field_hint":"poblacion","value_hint":"5000","operator":">"}
+metric_field_hint:null, limit:null, filter_groups:[
+  {"conditions":[
+    {"field_hint":"provincia","value_hint":"Madrid","operator":"="},
+    {"field_hint":"poblacion","value_hint":"5000","operator":">"}
+  ]}
+]
+
+Ejemplo (disyunción con "o"): "selecciona los municipios de Madrid o de Barcelona" ->
+metric_field_hint:null, limit:null, filter_groups:[
+  {"conditions":[{"field_hint":"provincia","value_hint":"Madrid","operator":"="}]},
+  {"conditions":[{"field_hint":"provincia","value_hint":"Barcelona","operator":"="}]}
+]
+
+Ejemplo (OR combinado con AND): "marca los municipios de Sevilla con más de 50000
+habitantes o de Cádiz con más de 20000 habitantes" -> filter_groups:[
+  {"conditions":[
+    {"field_hint":"provincia","value_hint":"Sevilla","operator":"="},
+    {"field_hint":"poblacion","value_hint":"50000","operator":">"}
+  ]},
+  {"conditions":[
+    {"field_hint":"provincia","value_hint":"Cadiz","operator":"="},
+    {"field_hint":"poblacion","value_hint":"20000","operator":">"}
+  ]}
 ]
 
 Si la petición es del tipo "selecciona/marca/resalta los N más/menos <adjetivo>" (un
 ranking, ordenar y quedarse con los N primeros/últimos), usa "metric_field_hint",
-"order" y "limit" en vez de (o además de) "filters":
+"order" y "limit" en vez de (o además de) "filter_groups":
 
 Ejemplo: "selecciona los dos ríos más largos de España" ->
-metric_field_hint:"longitud", order:"desc", limit:2, filters:[]
+metric_field_hint:"longitud", order:"desc", limit:2, filter_groups:[]
 
 "order" es "desc" para el valor mayor (más largo, más poblado) o "asc" para el menor.`;
 
@@ -65,7 +89,7 @@ async function buildSelectionNode(state) {
   const order = result?.order === "asc" ? "asc" : "desc";
   const limit = metricField && result?.limit ? Math.max(1, Math.min(result.limit, 50)) : null;
 
-  const { whereClause: filterClause, filterDescription } = await resolveFilters(state, result?.filters);
+  const { whereClause: filterClause, filterDescription } = await resolveFilters(state, result?.filter_groups);
 
   if (!filterClause && !metricField) {
     return { resultText: "No he identificado ninguna condición clara para hacer la selección." };
