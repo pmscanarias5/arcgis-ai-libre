@@ -82,7 +82,15 @@ const SYSTEM_PROMPT = `Eres el orquestador de un asistente de mapas GIS. Tu úni
   esto", "exporta la vista actual", "descárgame esto en PDF". "title" es un título
   opcional si el usuario lo menciona explícitamente; si no, usa null.`;
 
+// Palabras que, si aparecen en la petición, fuerzan "select_features" frente a
+// "query_layer" sin depender del criterio del LLM (que a veces las confunde).
+const FORCE_SELECT_FEATURES_REGEX = /\b(seleccion\w*|marca\w*|resalta\w*)\b|mu[eé]stra\w*\s+en\s+el\s+mapa/i;
+
 export async function getIntent(userPrompt, history = []) {
+  if (FORCE_SELECT_FEATURES_REGEX.test(userPrompt)) {
+    return { action: "select_features", params: {} };
+  }
+
   const intent = await callStructuredLLM(SYSTEM_PROMPT, [...history, { role: "user", content: userPrompt }], IntentSchema);
   return intent || { action: "none", params: { reply: "No he podido interpretar la respuesta del modelo." } };
 }

@@ -11,9 +11,10 @@ const API_KEY = import.meta.env.VITE_LLM_API_KEY || "";
  * @param {string} systemPrompt - Prompt del sistema
  * @param {Array} messages - Mensajes de la conversación
  * @param {object|null} schema - Esquema Zod opcional para validación
+ * @param {number} repairAttemptsLeft - Reintentos de reparación restantes ante fallo de Zod
  * @returns {object|null} Resultado parseado o null en error
  */
-export async function callStructuredLLM(systemPrompt, messages, schema = null) {
+export async function callStructuredLLM(systemPrompt, messages, schema = null, repairAttemptsLeft = 1) {
   const response = await fetch(`${BASE_URL}/chat/completions`, {
     method: "POST",
     headers: {
@@ -49,11 +50,17 @@ export async function callStructuredLLM(systemPrompt, messages, schema = null) {
     const parsed = schema.safeParse(result);
     if (!parsed.success) {
       console.warn("Validación Zod falló, intentando reparación:", parsed.error.format?._errors || parsed.error.message);
+
+      if (repairAttemptsLeft <= 0) {
+        console.error("Reparación agotada tras reintentos. Datos recibidos:", result);
+        return null;
+      }
+
       // Intentar reparar con un segundo llamado al LLM
       const repairPrompt = systemPrompt +
         "\n\nIMPORTANTE: Tu respuesta anterior no tenía el formato correcto. Responde EXACTAMENTE en este formato, sin texto adicional:\n" +
         (schema._def.description || "JSON con las propiedades esperadas.");
-      const repaired = await callStructuredLLM(repairPrompt, messages, schema);
+      const repaired = await callStructuredLLM(repairPrompt, messages, schema, repairAttemptsLeft - 1);
       if (repaired) return repaired;
       console.error("Reparación falló. Datos recibidos:", result);
       return null;

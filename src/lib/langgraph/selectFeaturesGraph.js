@@ -1,7 +1,7 @@
 import { StateGraph, Annotation, START, END } from "@langchain/langgraph";
 import { callStructuredLLM } from "../llm/callStructuredLLM.js";
 import { SelectFeaturesSchema } from "../llm/schemas.js";
-import { resolveLayer, loadSchemaNode, resolveFilters } from "./sharedNodes.js";
+import { resolveLayer, loadSchemaNode, resolveFilters, findBestField } from "./sharedNodes.js";
 import { setSelectionHighlight } from "../mapActions/selectionState.js";
 
 const SelectFeaturesState = Annotation.Root({
@@ -12,6 +12,9 @@ const SelectFeaturesState = Annotation.Root({
   fields: Annotation(),
   whereClause: Annotation(),
   filterDescription: Annotation(),
+  metricField: Annotation(),
+  order: Annotation(),
+  limit: Annotation(),
   resultText: Annotation()
 });
 
@@ -21,20 +24,34 @@ nombres de campo: usa solo palabras clave que probablemente aparezcan en su nomb
 o alias, la propia aplicación se encarga de emparejarlas con el campo real.
 
 Responde solo con JSON, sin texto adicional:
-{"filters":[{"field_hint":"<palabra clave del campo>","value_hint":"<valor>","operator":"=|>|>=|<|<=|!="}]}
+{
+  "metric_field_hint":"<palabra clave del campo a ordenar, o null si no se pide un ranking>",
+  "order":"desc|asc",
+  "limit":<num entre 1 y 50, o null si no se pide un top-N>,
+  "filters":[{"field_hint":"<palabra clave del campo>","value_hint":"<valor>","operator":"=|>|>=|<|<=|!="}]
+}
 
 "filters" es una lista de condiciones combinadas SIEMPRE con AND. Usa un elemento
 por cada restricción independiente que mencione la petición, no las mezcles en una
-sola.
+sola. Puede ir vacía si la selección es puramente un ranking (ver más abajo).
 
 Ejemplo: "selecciona los municipios con más de 50000 habitantes" ->
-filters:[{"field_hint":"poblacion","value_hint":"50000","operator":">"}]
+metric_field_hint:null, limit:null, filters:[{"field_hint":"poblacion","value_hint":"50000","operator":">"}]
 
 Ejemplo: "selecciona los municipios de la comunidad de madrid con más de 5000 habitantes" ->
-filters:[
+metric_field_hint:null, limit:null, filters:[
   {"field_hint":"provincia","value_hint":"Madrid","operator":"="},
   {"field_hint":"poblacion","value_hint":"5000","operator":">"}
-]`;
+]
+
+Si la petición es del tipo "selecciona/marca/resalta los N más/menos <adjetivo>" (un
+ranking, ordenar y quedarse con los N primeros/últimos), usa "metric_field_hint",
+"order" y "limit" en vez de (o además de) "filters":
+
+Ejemplo: "selecciona los dos ríos más largos de España" ->
+metric_field_hint:"longitud", order:"desc", limit:2, filters:[]
+
+"order" es "desc" para el valor mayor (más largo, más poblado) o "asc" para el menor.`;
 
 async function buildSelectionNode(state) {
   const fieldsDescription = state.fields
@@ -44,13 +61,23 @@ async function buildSelectionNode(state) {
   const userContent = `Campos disponibles en la capa "${state.layer.title}":\n${fieldsDescription}\n\nPetición del usuario: "${state.userPrompt}"`;
   const result = await callStructuredLLM(SELECT_FEATURES_PROMPT, [{ role: "user", content: userContent }], SelectFeaturesSchema);
 
-  const { whereClause, filterDescription } = await resolveFilters(state, result?.filters);
+  const metricField = result?.metric_field_hint ? findBestField(state.fields, result.metric_field_hint) : null;
+  const order = result?.order === "asc" ? "asc" : "desc";
+  const limit = metricField && result?.limit ? Math.max(1, Math.min(result.limit, 50)) : null;
 
-  if (!whereClause) {
+  const { whereClause: filterClause, filterDescription } = await resolveFilters(state, result?.filters);
+
+  if (!filterClause && !metricField) {
     return { resultText: "No he identificado ninguna condición clara para hacer la selección." };
   }
 
-  return { whereClause, filterDescription };
+  return {
+    whereClause: filterClause || "1=1",
+    filterDescription,
+    metricField,
+    order,
+    limit
+  };
 }
 
 async function executeSelectionNode(state) {
@@ -61,6 +88,13 @@ async function executeSelectionNode(state) {
   query.where = state.whereClause;
   query.outFields = [layer.objectIdField];
   query.returnGeometry = true;
+
+  if (state.metricField) {
+    query.orderByFields = [`${state.metricField.name} ${state.order.toUpperCase()}`];
+  }
+  if (state.limit) {
+    query.num = state.limit;
+  }
 
   const result = await layer.queryFeatures(query);
   if (!result.features.length) {

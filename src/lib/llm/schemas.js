@@ -15,7 +15,7 @@ export const SelectLayerSchema = z.object({
 });
 const FilterSchema = z.object({
   field_hint: z.string(),
-  value_hint: z.string(),
+  value_hint: z.string().nullable(),
   operator: z.enum(["=", ">", ">=", "<", "<=", "!="]).nullable()
 });
 
@@ -41,6 +41,9 @@ export const ExtractSearchTextSchema = z.object({
 });
 
 export const SelectFeaturesSchema = z.object({
+  metric_field_hint: z.string().nullable(),
+  order: z.enum(["asc", "desc"]).nullable(),
+  limit: z.number().min(1).max(50).nullable(),
   filters: z.array(FilterSchema).max(3)
 });
 
