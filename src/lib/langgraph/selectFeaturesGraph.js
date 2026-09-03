@@ -3,7 +3,7 @@ import { callStructuredLLM } from "../llm/callStructuredLLM.js";
 import { SelectFeaturesSchema } from "../llm/schemas.js";
 import { resolveLayer, loadSchemaNode, resolveFilters, findBestField } from "./sharedNodes.js";
 import { getLayerProfile, describeFieldsForPrompt } from "./layerCatalog.js";
-import { setSelectionHighlight } from "../mapActions/selectionState.js";
+import { applySelection } from "../mapActions/selectionSync.js";
 
 const SelectFeaturesState = Annotation.Root({
   userPrompt: Annotation(),
@@ -127,9 +127,7 @@ async function executeSelectionNode(state) {
 
   const objectIds = result.features.map((f) => f.attributes[layer.objectIdField]);
 
-  const layerView = await view.whenLayerView(layer);
-  const highlightHandle = layerView.highlight(objectIds);
-  setSelectionHighlight(layer.id, layer.title, highlightHandle); // <- único cambio real
+  await applySelection(view, layer, objectIds);
 
   const geometries = result.features.map((f) => f.geometry).filter(Boolean);
   if (geometries.length === 1) {

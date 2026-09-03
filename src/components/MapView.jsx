@@ -15,7 +15,7 @@ export default function MapViewComponent({ onViewReady, onOpenTable }) {
   }, [view, onViewReady]);
 
   return (
-    <div style={{ flex: 1, height: "100%", position: "relative" }}>
+    <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
       <div id="viewDiv" ref={containerRef} style={{ width: "100%", height: "100%" }} />
 
       {status === "loading" && (

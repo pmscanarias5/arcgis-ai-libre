@@ -72,15 +72,17 @@ const SYSTEM_PROMPT = `Eres el orquestador de un asistente de mapas GIS. Tu úni
     menciona la distancia, no la incluyas en params: la propia aplicación usa
     5 km por defecto.
 
+      Usa "print_map" cuando el usuario pida imprimir, exportar, generar un PDF, descargar
+  o "sacar" la vista actual del mapa. Ejemplos: "imprime el mapa", "genérame un PDF de
+  esto", "exporta la vista actual", "descárgame esto en PDF". "title" es un título
+  opcional si el usuario lo menciona explícitamente; si no, usa null.
+
   Para "go_to_location" calcula tú mismo las coordenadas aproximadas del lugar mencionado.
 
   Si la petición no encaja en ninguna acción, usa "none" y responde de forma breve y útil.
-  TEN EN CUENTA LOS MENSAJES HISTORICOS PARA ANALIZAR LA ÚLTIMA PETICIÓN DE USUARIO
+  TEN EN CUENTA LOS MENSAJES HISTORICOS PARA ANALIZAR LA ÚLTIMA PETICIÓN DE USUARIO`;
 
-  Usa "print_map" cuando el usuario pida imprimir, exportar, generar un PDF, descargar
-  o "sacar" la vista actual del mapa. Ejemplos: "imprime el mapa", "genérame un PDF de
-  esto", "exporta la vista actual", "descárgame esto en PDF". "title" es un título
-  opcional si el usuario lo menciona explícitamente; si no, usa null.`;
+
 
 // Palabras que, si aparecen en la petición, fuerzan "select_features" frente a
 // "query_layer" sin depender del criterio del LLM (que a veces las confunde).

@@ -10,10 +10,12 @@ export default function App() {
   return (
     <div className="app-shell">
       <div className="app-container">
-        <MapViewComponent onViewReady={setView} onOpenTable={setTableLayer} />
+        <div className="map-column">
+          <MapViewComponent onViewReady={setView} onOpenTable={setTableLayer} />
+          <AttributeTablePanel view={view} layer={tableLayer} onClose={() => setTableLayer(null)} />
+        </div>
         <ChatSidebar view={view} />
       </div>
-      <AttributeTablePanel view={view} layer={tableLayer} onClose={() => setTableLayer(null)} />
     </div>
   );
 }
