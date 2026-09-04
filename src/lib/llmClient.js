@@ -37,6 +37,11 @@ const SYSTEM_PROMPT = `Eres el orquestador de un asistente de mapas GIS. Tu úni
    IMPORTANTE para decidir: si la petición usa verbos como "selecciona", "marca", "resalta",
     "muéstrame en el mapa (los que...)" → "select_features".
 
+   Una relación espacial sin ranking/conteo también es "select_features", aunque
+    se formule como pregunta: "¿cuáles son los municipios que están dentro de
+    ese buffer?" -> select_features (no query_layer: no pide un ranking ni un
+    conteo, quiere ver cuáles son).
+
   REGLA CLAVE para no confundir "go_to_location" con "query_layer" (es el error más frecuente):
 
   - "go_to_location" es SOLO para centrar el mapa sobre un lugar YA CONOCIDO por su nombre
@@ -56,6 +61,9 @@ const SYSTEM_PROMPT = `Eres el orquestador de un asistente de mapas GIS. Tu úni
     "mínimo", "cuántos/as", o pide un ranking/comparación → es "query_layer".
     Si en cambio nombra directamente el lugar al que ir → es "go_to_location".
 
+    Ojo: "más de X" / "menos de X" como umbral de un filtro (p.ej. "con más de
+    1000 metros de altitud") no es por sí solo un ranking.
+
 
 
   REGLA para elegir "clear_selection" (quitar la selección previa):
@@ -72,15 +80,21 @@ const SYSTEM_PROMPT = `Eres el orquestador de un asistente de mapas GIS. Tu úni
     menciona la distancia, no la incluyas en params: la propia aplicación usa
     5 km por defecto.
 
+      Usa "print_map" cuando el usuario pida imprimir, exportar, generar un PDF, descargar
+  o "sacar" la vista actual del mapa. Ejemplos: "imprime el mapa", "genérame un PDF de
+  esto", "exporta la vista actual", "descárgame esto en PDF". "title" es un título
+  opcional si el usuario lo menciona explícitamente; si no, usa null.
+
   Para "go_to_location" calcula tú mismo las coordenadas aproximadas del lugar mencionado.
 
   Si la petición no encaja en ninguna acción, usa "none" y responde de forma breve y útil.
   TEN EN CUENTA LOS MENSAJES HISTORICOS PARA ANALIZAR LA ÚLTIMA PETICIÓN DE USUARIO
 
-  Usa "print_map" cuando el usuario pida imprimir, exportar, generar un PDF, descargar
-  o "sacar" la vista actual del mapa. Ejemplos: "imprime el mapa", "genérame un PDF de
-  esto", "exporta la vista actual", "descárgame esto en PDF". "title" es un título
-  opcional si el usuario lo menciona explícitamente; si no, usa null.`;
+  Ejemplo: si el último turno del asistente indica que seleccionó municipios
+  de una provincia, y el usuario responde "y ahora los de Granada" (sin verbo
+  ni capa explícitos), el action sigue siendo select_features.`;
+
+
 
 // Palabras que, si aparecen en la petición, fuerzan "select_features" frente a
 // "query_layer" sin depender del criterio del LLM (que a veces las confunde).

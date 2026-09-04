@@ -8,6 +8,8 @@
   --border-color: #1e313b;
   --user-msg-bg: #1c3644;
   --bot-msg-bg: #162630;
+  --geocoder-blue: #1e313b;
+  --geocoder-accent-pink: #e6007e;
 }
 
 * {
@@ -38,14 +40,160 @@ html, body, #root {
   min-height: 0; /* necesario para que los hijos con overflow no desborden en flex column */
 }
 
+.map-column {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.query-results-panel {
+  position: absolute;
+  top: 76px;
+  left: 12px;
+  width: min(340px, calc(100% - 24px));
+  max-height: calc(100% - 100px);
+  background-color: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  z-index: 15;
+  overflow: hidden;
+}
+
+.query-results-header {
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--geocoder-blue);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.query-results-close {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.query-results-close:hover {
+  color: #fff;
+}
+
+.query-results-count {
+  padding: 8px 14px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.query-results-list {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.query-results-record {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.query-results-record:last-child {
+  border-bottom: none;
+}
+
+.query-results-record-title {
+  color: var(--accent-teal);
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+}
+
+.query-results-record-fields {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+}
+
+.query-results-field-row {
+  display: contents;
+}
+
+.query-results-field-row dt {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.query-results-field-row dd {
+  color: var(--text-main);
+  font-size: 0.8rem;
+  margin: 0;
+  word-break: break-word;
+}
+
+.query-results-show-more {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border-color);
+  color: var(--accent-teal);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+}
+
+.query-results-show-more:hover {
+  background-color: rgba(0, 230, 195, 0.08);
+  color: var(--accent-hover);
+}
+
+.query-results-show-more:disabled {
+  color: var(--text-muted);
+  cursor: default;
+  background: none;
+}
+
 .attribute-table-panel {
-  height: 300px;
-  min-height: 300px;
+  min-height: 150px;
+  flex-shrink: 0;
   background-color: var(--panel-bg);
   border-top: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
   z-index: 20;
+}
+
+.attribute-table-resize-handle {
+  height: 6px;
+  flex-shrink: 0;
+  cursor: row-resize;
+  position: relative;
+}
+
+.attribute-table-resize-handle::before {
+  content: "";
+  position: absolute;
+  inset: 2px 0 auto 0;
+  height: 2px;
+  border-radius: 1px;
+  background-color: var(--border-color);
+}
+
+.attribute-table-resize-handle:hover::before,
+.attribute-table-resize-handle.is-dragging::before {
+  background-color: var(--accent-teal);
 }
 
 .attribute-table-header {
@@ -71,9 +219,54 @@ html, body, #root {
   color: #fff;
 }
 
+.attribute-table-footer {
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.attribute-table-toggle-filter {
+  background: none;
+  border: 1px solid var(--accent-teal);
+  color: var(--accent-teal);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.attribute-table-toggle-filter:hover {
+  background-color: var(--accent-teal);
+  color: #052423;
+}
+
 .attribute-table-container {
   flex: 1;
   overflow: auto;
+}
+
+/* La tabla de atributos (FeatureTable) resalta las celdas de una fila
+   seleccionada internamente con vaadin-grid::part(body-cell highlight),
+   que por defecto usa var(--calcite-color-foreground-3) (un gris apenas
+   perceptible en el tema oscuro). Esa regla vive dentro del shadow DOM de
+   vaadin-grid con su propio !important, así que sobrescribir la propiedad
+   background-color desde fuera (vía ::part) no gana. En cambio, las
+   variables CSS sí heredan a través del shadow DOM, así que se pisa
+   directamente el valor de la variable en el propio elemento vaadin-grid. */
+.attribute-table-container vaadin-grid {
+  --calcite-color-foreground-3: rgba(0, 230, 195, 0.35);
+}
+ .attribute-table-container {
+  --calcite-color-foreground-3: rgba(0, 230, 195, 0.65);
 }
 
 #viewDiv {
@@ -81,6 +274,26 @@ html, body, #root {
   height: 100%;
   position: relative;
 }
+
+/* Sube ligeramente el tamaño de todos los widgets/botones del mapa (Zoom,
+   buscador, capas, mapa base, borrar selección, tabla de atributos). Se
+   escala cada esquina completa (no cada widget por separado) para que todo
+   crezca de forma consistente, anclado a su propia esquina para que no se
+   desplace ni se salga del viewport. */
+/* #viewDiv .esri-ui-top-left {
+  transform: scale(1.15);
+  transform-origin: top left;
+}
+
+#viewDiv .esri-ui-top-right {
+  transform: scale(1.15);
+  transform-origin: top right;
+}
+
+#viewDiv .esri-ui-bottom-right {
+  transform: scale(1.15);
+  transform-origin: bottom right;
+} */
 
 .chat-sidebar {
   width: 380px;
@@ -244,6 +457,77 @@ html, body, #root {
 
 .clear-selection-button.has-selection:hover {
   color: var(--accent-hover);
+}
+.esri-widget--button{
+  zoom: 1.15 !important;
+  /* border-radius: 8px !important; */
+}
+
+.geocoder-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background-color: var(--geocoder-blue);
+  padding: 6px 14px 6px 6px;
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.geocoder-banner__logo-wrap {
+  display: flex;
+  align-items: center;
+  background-color: #fff;
+  border-radius: 999px;
+  padding: 4px 12px;
+}
+
+.geocoder-banner__logo {
+  height: 26px;
+  width: auto;
+  display: block;
+}
+
+.geocoder-banner__brand {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.geocoder-banner__brand-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.geocoder-banner__brand-accent {
+  color: var(--geocoder-accent-pink);
+}
+
+.geocoder-banner__brand-subtitle {
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.geocoder-banner__search {
+  min-width: 280px;
+  background-color: #fff;
+  border-radius: 999px;
+  overflow: hidden;
+  /* El Search widget usa componentes Calcite internos (input, botón) que
+     leen estas variables de color: se pisan aquí para que, dentro del
+     buscador, pasen de la paleta oscura de la app a una píldora blanca. */
+  --calcite-color-foreground-1: #fff;
+  --calcite-color-foreground-2: #f2f2f2;
+  --calcite-color-foreground-3: #e6e6e6;
+  --calcite-color-text-1: #1a1a2e;
+  --calcite-color-text-2: #4a4a4a;
+  --calcite-color-text-3: #6b6b6b;
+  --calcite-color-border-input: #d8d8d8;
+}
+
+.geocoder-banner__search .esri-search {
+  width: 100%;
 }
 
 @media (max-width: 768px) {
