@@ -27,6 +27,20 @@ const FilterGroupSchema = z.object({
   conditions: z.array(FilterConditionSchema).max(3)
 });
 
+// Relación espacial con otra entidad/capa (p.ej. "que intersecan con la
+// provincia de Guadalajara") o con el último buffer generado en la
+// conversación (p.ej. "los municipios dentro de ese buffer"). Se combina
+// siempre con AND junto a "filter_groups", igual que hace ArcGIS con
+// query.geometry/query.spatialRelationship y query.where.
+const SpatialFilterSchema = z
+  .object({
+    relation: z.enum(["intersects", "contains", "within", "touches", "crosses", "overlaps", "disjoint"]),
+    reference: z.enum(["buffer", "layer_entity"]),
+    target_layer_hint: z.string().nullable(),
+    target_entity_hint: z.string().nullable()
+  })
+  .nullable();
+
 /**
  * Esquema para construir una consulta de capa (query_layer).
  */
@@ -34,7 +48,8 @@ export const BuildQuerySchema = z.object({
   metric_field_hint: z.string().nullable(),
   order: z.enum(["asc", "desc"]),
   limit: z.number().min(1).max(10),
-  filter_groups: z.array(FilterGroupSchema).max(3)
+  filter_groups: z.array(FilterGroupSchema).max(3),
+  spatial_filter: SpatialFilterSchema
 });
 
 
@@ -51,7 +66,8 @@ export const SelectFeaturesSchema = z.object({
   metric_field_hint: z.string().nullable(),
   order: z.enum(["asc", "desc"]).nullable(),
   limit: z.number().min(1).max(50).nullable(),
-  filter_groups: z.array(FilterGroupSchema).max(3)
+  filter_groups: z.array(FilterGroupSchema).max(3),
+  spatial_filter: SpatialFilterSchema
 });
 
 

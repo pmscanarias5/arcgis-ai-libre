@@ -37,6 +37,11 @@ const SYSTEM_PROMPT = `Eres el orquestador de un asistente de mapas GIS. Tu úni
    IMPORTANTE para decidir: si la petición usa verbos como "selecciona", "marca", "resalta",
     "muéstrame en el mapa (los que...)" → "select_features".
 
+   Una relación espacial sin ranking/conteo también es "select_features", aunque
+    se formule como pregunta: "¿cuáles son los municipios que están dentro de
+    ese buffer?" -> select_features (no query_layer: no pide un ranking ni un
+    conteo, quiere ver cuáles son).
+
   REGLA CLAVE para no confundir "go_to_location" con "query_layer" (es el error más frecuente):
 
   - "go_to_location" es SOLO para centrar el mapa sobre un lugar YA CONOCIDO por su nombre

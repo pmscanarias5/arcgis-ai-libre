@@ -1,6 +1,7 @@
 import { callStructuredLLM } from "../llm/callStructuredLLM.js";
 import { ResolveCandidateSchema, SelectLayerSchema } from "../llm/schemas.js";
 import { describeLayersForPrompt } from "./layerCatalog.js";
+import { getLastBuffer } from "../mapActions/lastBufferState.js";
 
 /**
  * Formatea el historial de conversación (turnos {role, content}) como un
@@ -198,6 +199,12 @@ Ejemplo: contexto "Asistente: He seleccionado 3 elemento(s) en Municipios
 (provincia = Madrid)." + petición actual "y ahora los de Granada" -> layer_id
 de Municipios (la petición no nombra ninguna capa, pero la conversación ya la fija).
 
+Si la petición menciona dos capas distintas porque una de ellas es solo una
+referencia espacial (p.ej. "los ríos que intersecan con la provincia de
+Guadalajara"), elige la capa de las entidades que se van a seleccionar o
+consultar (en ese ejemplo, ríos) — NO la capa de referencia usada solo para
+filtrar espacialmente (provincia).
+
 Responde solo con JSON, sin texto adicional:
 {"layer_id":"<id exacto de la lista>"} si encuentras una coincidencia razonable
 {"layer_id":null} si ninguna capa de la lista encaja con la petición`;
@@ -248,4 +255,98 @@ export async function loadSchemaNode(state) {
 
   const fields = (layer.fields || []).map((f) => ({ name: f.name, alias: f.alias, type: f.type }));
   return { layer, fields };
+}
+
+const IGNORED_RECORD_FIELD_PATTERNS = [/^objectid$/i, /^shape/i, /^fid$/i, /^globalid$/i];
+
+/**
+ * Convierte entidades reales (features de una query) en "records" listos
+ * para el panel de resultados del chat: por cada entidad, un título (si hay
+ * campo de nombre) y la lista completa de sus atributos como pares
+ * etiqueta/valor (usando el alias real del campo). Se recorta a "limit"
+ * entidades para no volcar un resultado descomunal en el panel — el resto de
+ * la respuesta (resaltado en el mapa, zoom) sigue operando sobre TODAS las
+ * entidades encontradas, esto es solo para la parte informativa. Dentro de
+ * ese límite, el panel pagina de 50 en 50 con un botón "Mostrar más"
+ * (ver QueryResultsPanel.jsx), sin volver a consultar el servidor.
+ */
+export function buildRecordsFromFeatures(features, fields, labelField, { limit = 500 } = {}) {
+  const displayFields = fields.filter((f) => !IGNORED_RECORD_FIELD_PATTERNS.some((re) => re.test(f.name)));
+  return features.slice(0, limit).map((feature) => ({
+    title: labelField ? feature.attributes[labelField.name] : null,
+    fields: displayFields.map((f) => ({ label: f.alias || f.name, value: feature.attributes[f.name] }))
+  }));
+}
+
+// Empareja una pista de capa de referencia (p.ej. "provincia") contra los
+// títulos de las capas realmente cargadas, igual que findBestField hace con
+// nombres de campo. Determinista, sin LLM: la ambigüedad entre DOS capas
+// mencionadas en la misma frase (la que se selecciona/consulta y la que solo
+// se usa como referencia espacial) ya se resuelve en el prompt de extracción
+// (ver SELECT_FEATURES_PROMPT/BUILD_QUERY_PROMPT), así que aquí solo hace
+// falta un emparejamiento simple y predecible.
+export function findLayerByHint(layers, hint) {
+  const target = normalize(hint);
+  if (!target) return null;
+  return layers.find((l) => normalize(l.title).includes(target)) || null;
+}
+
+// Dado un hint de búsqueda, resuelve la geometría real de una entidad
+// concreta de una capa: mismo patrón que ya usan buildEntityQueryNode +
+// executeBufferNode en bufferEntityGraph.js (campo de nombre -> candidatos
+// reales -> desambiguación -> geometría), como una única función para poder
+// reutilizarlo también desde la resolución de filtros espaciales.
+export async function resolveEntityGeometry(layer, searchText, userPrompt) {
+  await layer.load();
+  if (typeof layer.queryFeatures !== "function" || !searchText) return null;
+
+  const fields = (layer.fields || []).map((f) => ({ name: f.name, alias: f.alias, type: f.type }));
+  const labelField = findLabelField(fields, layer.displayField);
+  if (!labelField) return null;
+
+  const candidates = await searchDistinctValues(layer, labelField, searchText);
+  if (candidates.length === 0) return null;
+
+  const resolvedValue = await resolveAmbiguousValue(userPrompt, candidates);
+  const safe = resolvedValue.replace(/'/g, "''");
+
+  const query = layer.createQuery();
+  query.where = `${labelField.name} = '${safe}'`;
+  query.outFields = [labelField.name];
+  query.num = 1;
+  query.returnGeometry = true;
+
+  const result = await layer.queryFeatures(query);
+  if (!result.features.length) return null;
+
+  return { geometry: result.features[0].geometry, description: `${resolvedValue} (${layer.title})` };
+}
+
+/**
+ * Resuelve un spatial_filter (del LLM) a una geometría real + relación,
+ * lista para usar como query.geometry/query.spatialRelationship. Devuelve
+ * null si no se pudo resolver (buffer inexistente, capa/entidad no
+ * encontrada, o si spatialFilter es null). La usan tanto select_features
+ * como query_layer.
+ */
+export async function resolveSpatialFilter(spatialFilter, { view, userPrompt }) {
+  if (!spatialFilter) return null;
+
+  if (spatialFilter.reference === "buffer") {
+    const buffer = getLastBuffer();
+    if (!buffer) return null;
+    return { geometry: buffer.geometry, relation: spatialFilter.relation, description: `${spatialFilter.relation} ${buffer.label}` };
+  }
+
+  if (spatialFilter.reference === "layer_entity" && spatialFilter.target_layer_hint && spatialFilter.target_entity_hint) {
+    const targetLayer = findLayerByHint(view.map.layers.toArray(), spatialFilter.target_layer_hint);
+    if (!targetLayer) return null;
+
+    const resolved = await resolveEntityGeometry(targetLayer, spatialFilter.target_entity_hint, userPrompt);
+    if (!resolved) return null;
+
+    return { geometry: resolved.geometry, relation: spatialFilter.relation, description: `${spatialFilter.relation} ${resolved.description}` };
+  }
+
+  return null;
 }

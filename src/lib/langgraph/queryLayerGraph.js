@@ -7,7 +7,9 @@ import {
   findLabelField,
   findBestField,
   resolveFilters,
-  formatConversationHistory
+  formatConversationHistory,
+  resolveSpatialFilter,
+  buildRecordsFromFeatures
 } from "./sharedNodes.js";
 import { getLayerProfile, describeFieldsForPrompt } from "./layerCatalog.js";
 
@@ -24,6 +26,11 @@ const QueryLayerState = Annotation.Root({
   limit: Annotation(),
   whereClause: Annotation(),
   filterDescription: Annotation(),
+  spatialGeometry: Annotation(),
+  spatialRelation: Annotation(),
+  spatialDescription: Annotation(),
+  records: Annotation(),
+  totalCount: Annotation(),
   resultText: Annotation()
 });
 
@@ -39,7 +46,8 @@ Responde solo con JSON, sin texto adicional:
   "metric_field_hint":"<palabra clave del campo a analizar, o null si solo se pide contar>",
   "order":"desc|asc",
   "limit":<num entre 1 y 10>,
-  "filter_groups":[{"conditions":[{"field_hint":"<palabra clave del campo>","value_hint":"<valor>","operator":"=|>|>=|<|<=|!="}]}]
+  "filter_groups":[{"conditions":[{"field_hint":"<palabra clave del campo>","value_hint":"<valor>","operator":"=|>|>=|<|<=|!="}]}],
+  "spatial_filter":null
 }
 
 "filter_groups" es una lista de grupos de condiciones que restringen los resultados.
@@ -93,7 +101,31 @@ filter_groups:[{"conditions":[{"field_hint":"provincia","value_hint":"Granada","
 Ejemplo: contexto "Asistente: ... el municipio más poblado en Municipios
 (provincia = Madrid) ..." + petición actual "¿y el menos poblado?" ->
 metric_field_hint:"poblacion", order:"asc" (se invierte), limit igual que
-antes, filter_groups igual que antes (provincia = Madrid, aunque no se repita).`;
+antes, filter_groups igual que antes (provincia = Madrid, aunque no se repita).
+
+Además de "filter_groups" (condiciones sobre los propios atributos), la
+petición puede pedir una relación ESPACIAL con otra entidad o capa (p.ej.
+"que intersecan con...", "dentro de...", "que contienen...", "que tocan...",
+"que cruzan...", "que se solapan con..."). En ese caso añade:
+
+"spatial_filter": {
+  "relation":"intersects|contains|within|touches|crosses|overlaps|disjoint",
+  "reference":"buffer|layer_entity",
+  "target_layer_hint":"<palabra clave de la OTRA capa, o null si reference es buffer>",
+  "target_entity_hint":"<nombre de la entidad a buscar en esa capa, o null si reference es buffer>"
+}
+
+Usa "reference":"buffer" cuando la petición se refiere a un área de
+influencia o buffer creado antes en la conversación ("ese buffer", "el área
+de influencia anterior", "la zona que generamos antes"). Usa
+"reference":"layer_entity" cuando nombra un lugar/capa concretos.
+Si no hay ninguna relación espacial en la petición, usa "spatial_filter":null.
+
+Ejemplo: "selecciona los ríos que intersecan con la provincia de Guadalajara" ->
+spatial_filter:{"relation":"intersects","reference":"layer_entity","target_layer_hint":"provincia","target_entity_hint":"Guadalajara"}
+
+Ejemplo: "los municipios que están completamente dentro de ese buffer" ->
+spatial_filter:{"relation":"within","reference":"buffer","target_layer_hint":null,"target_entity_hint":null}`;
 
 
 
@@ -111,29 +143,49 @@ async function buildQueryNode(state) {
 
   const { whereClause: filterClause, filterDescription } = await resolveFilters(state, result?.filter_groups);
 
+  let spatialGeometry = null;
+  let spatialRelation = null;
+  let spatialDescription = null;
+  if (result?.spatial_filter) {
+    const resolvedSpatial = await resolveSpatialFilter(result.spatial_filter, { view: state.view, userPrompt: state.userPrompt });
+    if (!resolvedSpatial) {
+      return { resultText: "No he podido identificar la entidad o el buffer de referencia para aplicar la relación espacial." };
+    }
+    spatialGeometry = resolvedSpatial.geometry;
+    spatialRelation = resolvedSpatial.relation;
+    spatialDescription = resolvedSpatial.description;
+  }
+
   const baseClause = metricField ? `${metricField.name} IS NOT NULL` : "1=1";
   const whereClause = filterClause ? `${baseClause} AND ${filterClause}` : baseClause;
 
-  return { metricField, labelField, order, limit, whereClause, filterDescription };
+  return { metricField, labelField, order, limit, whereClause, filterDescription, spatialGeometry, spatialRelation, spatialDescription };
 }
 
 async function executeQueryNode(state) {
   const { layer, view } = state;
-  const filterSuffix = state.filterDescription ? ` (${state.filterDescription})` : "";
+  const descriptionParts = [state.filterDescription, state.spatialDescription].filter(Boolean);
+  const filterSuffix = descriptionParts.length ? ` (${descriptionParts.join(", ")})` : "";
 
   if (!state.metricField) {
     const countQuery = layer.createQuery();
     countQuery.where = state.whereClause;
+    if (state.spatialGeometry) {
+      countQuery.geometry = state.spatialGeometry;
+      countQuery.spatialRelationship = state.spatialRelation;
+    }
     const count = await layer.queryFeatureCount(countQuery);
     return { resultText: `La capa <b>${layer.title}</b>${filterSuffix} tiene <b>${count}</b> elemento(s).` };
   }
 
   const query = layer.createQuery();
   query.where = state.whereClause;
+  if (state.spatialGeometry) {
+    query.geometry = state.spatialGeometry;
+    query.spatialRelationship = state.spatialRelation;
+  }
   query.orderByFields = [`${state.metricField.name} ${state.order.toUpperCase()}`];
-  query.outFields = state.labelField
-    ? [state.metricField.name, state.labelField.name]
-    : [state.metricField.name];
+  query.outFields = ["*"];
   query.num = state.limit;
   query.returnGeometry = true;
 
@@ -141,6 +193,8 @@ async function executeQueryNode(state) {
   if (!result.features.length) {
     return { resultText: `No he encontrado datos en <b>${layer.title}</b>${filterSuffix} para lo que pides.` };
   }
+
+  const records = buildRecordsFromFeatures(result.features, state.fields, state.labelField);
 
   const items = result.features
     .map((f) => {
@@ -168,7 +222,12 @@ async function executeQueryNode(state) {
     await view.goTo(geometries);
   }
 
-  return { resultText: `${heading}:<ul>${items}</ul>` };
+  return {
+    resultText: `${heading}:<ul>${items}</ul>`,
+    records,
+    layerTitle: layer.title,
+    totalCount: result.features.length
+  };
 }
 
 const graph = new StateGraph(QueryLayerState)
@@ -177,10 +236,23 @@ const graph = new StateGraph(QueryLayerState)
   .addNode("executeQuery", executeQueryNode)
   .addEdge(START, "loadSchema")
   .addConditionalEdges("loadSchema", (state) => (state.resultText ? END : "buildQuery"))
-  .addEdge("buildQuery", "executeQuery")
+  .addConditionalEdges("buildQuery", (state) => (state.resultText ? END : "executeQuery"))
   .addEdge("executeQuery", END);
 
 const queryLayerGraph = graph.compile();
+
+function buildQueryLayerResult(finalState) {
+  if (!finalState.resultText) return "No he podido completar la consulta.";
+  if (finalState.records?.length) {
+    return {
+      resultText: finalState.resultText,
+      records: finalState.records,
+      layerTitle: finalState.layerTitle,
+      totalCount: finalState.totalCount
+    };
+  }
+  return finalState.resultText;
+}
 
 export async function runQueryLayerGraph(view, userPrompt, history = []) {
   const availableLayers = view.map.layers.toArray();
@@ -198,7 +270,7 @@ export async function runQueryLayerGraph(view, userPrompt, history = []) {
       options: layerResult.options,
       resume: async (chosenLayerId) => {
         const finalState = await queryLayerGraph.invoke({ userPrompt, view, selectedLayerId: chosenLayerId, history });
-        return finalState.resultText || "No he podido completar la consulta.";
+        return buildQueryLayerResult(finalState);
       }
     };
   }
@@ -209,5 +281,5 @@ export async function runQueryLayerGraph(view, userPrompt, history = []) {
     selectedLayerId: layerResult.selectedLayerId,
     history
   });
-  return finalState.resultText || "No he podido completar la consulta.";
+  return buildQueryLayerResult(finalState);
 }

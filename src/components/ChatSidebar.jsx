@@ -5,7 +5,7 @@ import { mapActions } from "../lib/mapActions/index.js";
 
 const now = () => new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-export default function ChatSidebar({ view }) {
+export default function ChatSidebar({ view, onResults }) {
   const [messages, setMessages] = useState([
     {
       id: "welcome",
@@ -68,14 +68,26 @@ export default function ChatSidebar({ view }) {
       return;
     }
 
+    // Además de un string o { needsInput }, un resultado puede llegar como
+    // { resultText, records, layerTitle, totalCount }: el texto se muestra
+    // en el chat igual que un string suelto, y si trae "records" (entidades
+    // extraídas de la consulta/selección con todos sus atributos) se abre
+    // el panel de resultados, que flota sobre el mapa sin bloquear el chat.
+    const hasRecords = result && typeof result === "object" && typeof result.resultText === "string";
+    const chatText = hasRecords ? result.resultText : result;
+
     // Se guarda aquí, no al recibir el intent: es el único punto en el que
     // ya se conoce el texto en lenguaje natural del resultado (rico en
     // contexto: capa, filtro, métrica...), tanto si llega directo como tras
     // resolver una desambiguación.
-    historyRef.current.push({ role: "assistant", content: typeof result === "string" ? result : JSON.stringify(result) });
+    historyRef.current.push({ role: "assistant", content: typeof chatText === "string" ? chatText : JSON.stringify(chatText) });
     historyRef.current = historyRef.current.slice(-10);
 
-    addMessage("bot", result);
+    addMessage("bot", chatText);
+
+    if (hasRecords && result.records?.length && onResults) {
+      onResults({ records: result.records, layerTitle: result.layerTitle, totalCount: result.totalCount });
+    }
   }
 
   async function handleSend() {

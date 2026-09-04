@@ -1,7 +1,16 @@
 import { StateGraph, Annotation, START, END } from "@langchain/langgraph";
 import { callStructuredLLM } from "../llm/callStructuredLLM.js";
 import { SelectFeaturesSchema } from "../llm/schemas.js";
-import { resolveLayer, loadSchemaNode, resolveFilters, findBestField, formatConversationHistory } from "./sharedNodes.js";
+import {
+  resolveLayer,
+  loadSchemaNode,
+  resolveFilters,
+  findBestField,
+  findLabelField,
+  formatConversationHistory,
+  resolveSpatialFilter,
+  buildRecordsFromFeatures
+} from "./sharedNodes.js";
 import { getLayerProfile, describeFieldsForPrompt } from "./layerCatalog.js";
 import { applySelection } from "../mapActions/selectionSync.js";
 
@@ -15,8 +24,14 @@ const SelectFeaturesState = Annotation.Root({
   whereClause: Annotation(),
   filterDescription: Annotation(),
   metricField: Annotation(),
+  labelField: Annotation(),
   order: Annotation(),
   limit: Annotation(),
+  spatialGeometry: Annotation(),
+  spatialRelation: Annotation(),
+  spatialDescription: Annotation(),
+  records: Annotation(),
+  totalCount: Annotation(),
   resultText: Annotation()
 });
 
@@ -30,7 +45,8 @@ Responde solo con JSON, sin texto adicional:
   "metric_field_hint":"<palabra clave del campo a ordenar, o null si no se pide un ranking>",
   "order":"desc|asc",
   "limit":<num entre 1 y 50, o null si no se pide un top-N>,
-  "filter_groups":[{"conditions":[{"field_hint":"<palabra clave del campo>","value_hint":"<valor>","operator":"=|>|>=|<|<=|!="}]}]
+  "filter_groups":[{"conditions":[{"field_hint":"<palabra clave del campo>","value_hint":"<valor>","operator":"=|>|>=|<|<=|!="}]}],
+  "spatial_filter":null
 }
 
 "filter_groups" es una lista de grupos de condiciones. Las condiciones DENTRO de
@@ -90,7 +106,31 @@ filter_groups:[{"conditions":[{"field_hint":"provincia","value_hint":"Granada","
 Ejemplo: contexto "Asistente: ... el municipio más poblado en Municipios
 (provincia = Madrid) ..." + petición actual "¿y el menos poblado?" ->
 metric_field_hint:"poblacion", order:"asc" (se invierte), limit igual que
-antes, filter_groups igual que antes (provincia = Madrid, aunque no se repita).`;
+antes, filter_groups igual que antes (provincia = Madrid, aunque no se repita).
+
+Además de "filter_groups" (condiciones sobre los propios atributos), la
+petición puede pedir una relación ESPACIAL con otra entidad o capa (p.ej.
+"que intersecan con...", "dentro de...", "que contienen...", "que tocan...",
+"que cruzan...", "que se solapan con..."). En ese caso añade:
+
+"spatial_filter": {
+  "relation":"intersects|contains|within|touches|crosses|overlaps|disjoint",
+  "reference":"buffer|layer_entity",
+  "target_layer_hint":"<palabra clave de la OTRA capa, o null si reference es buffer>",
+  "target_entity_hint":"<nombre de la entidad a buscar en esa capa, o null si reference es buffer>"
+}
+
+Usa "reference":"buffer" cuando la petición se refiere a un área de
+influencia o buffer creado antes en la conversación ("ese buffer", "el área
+de influencia anterior", "la zona que generamos antes"). Usa
+"reference":"layer_entity" cuando nombra un lugar/capa concretos.
+Si no hay ninguna relación espacial en la petición, usa "spatial_filter":null.
+
+Ejemplo: "selecciona los ríos que intersecan con la provincia de Guadalajara" ->
+spatial_filter:{"relation":"intersects","reference":"layer_entity","target_layer_hint":"provincia","target_entity_hint":"Guadalajara"}
+
+Ejemplo: "los municipios que están completamente dentro de ese buffer" ->
+spatial_filter:{"relation":"within","reference":"buffer","target_layer_hint":null,"target_entity_hint":null}`;
 
 async function buildSelectionNode(state) {
   const profile = await getLayerProfile(state.layer);
@@ -100,12 +140,26 @@ async function buildSelectionNode(state) {
   const result = await callStructuredLLM(SELECT_FEATURES_PROMPT, [{ role: "user", content: userContent }], SelectFeaturesSchema);
 
   const metricField = result?.metric_field_hint ? findBestField(state.fields, result.metric_field_hint) : null;
+  const labelField = findLabelField(state.fields, state.layer.displayField);
   const order = result?.order === "asc" ? "asc" : "desc";
   const limit = metricField && result?.limit ? Math.max(1, Math.min(result.limit, 50)) : null;
 
   const { whereClause: filterClause, filterDescription } = await resolveFilters(state, result?.filter_groups);
 
-  if (!filterClause && !metricField) {
+  let spatialGeometry = null;
+  let spatialRelation = null;
+  let spatialDescription = null;
+  if (result?.spatial_filter) {
+    const resolvedSpatial = await resolveSpatialFilter(result.spatial_filter, { view: state.view, userPrompt: state.userPrompt });
+    if (!resolvedSpatial) {
+      return { resultText: "No he podido identificar la entidad o el buffer de referencia para aplicar la relación espacial." };
+    }
+    spatialGeometry = resolvedSpatial.geometry;
+    spatialRelation = resolvedSpatial.relation;
+    spatialDescription = resolvedSpatial.description;
+  }
+
+  if (!filterClause && !metricField && !spatialGeometry) {
     return { resultText: "No he identificado ninguna condición clara para hacer la selección." };
   }
 
@@ -113,19 +167,29 @@ async function buildSelectionNode(state) {
     whereClause: filterClause || "1=1",
     filterDescription,
     metricField,
+    labelField,
     order,
-    limit
+    limit,
+    spatialGeometry,
+    spatialRelation,
+    spatialDescription
   };
 }
 
 async function executeSelectionNode(state) {
   const { layer, view } = state;
-  const filterSuffix = state.filterDescription ? ` (${state.filterDescription})` : "";
+  const descriptionParts = [state.filterDescription, state.spatialDescription].filter(Boolean);
+  const filterSuffix = descriptionParts.length ? ` (${descriptionParts.join(", ")})` : "";
 
   const query = layer.createQuery();
   query.where = state.whereClause;
   query.outFields = [layer.objectIdField];
   query.returnGeometry = true;
+
+  if (state.spatialGeometry) {
+    query.geometry = state.spatialGeometry;
+    query.spatialRelationship = state.spatialRelation;
+  }
 
   if (state.metricField) {
     query.orderByFields = [`${state.metricField.name} ${state.order.toUpperCase()}`];
@@ -150,8 +214,29 @@ async function executeSelectionNode(state) {
     await view.goTo(geometries);
   }
 
+  // Consulta aparte, acotada, solo para el panel informativo: la selección
+  // y el resaltado ya se han hecho arriba sobre TODAS las entidades
+  // encontradas (result.features), esto no las limita en absoluto.
+  const recordsQuery = layer.createQuery();
+  recordsQuery.where = state.whereClause;
+  if (state.spatialGeometry) {
+    recordsQuery.geometry = state.spatialGeometry;
+    recordsQuery.spatialRelationship = state.spatialRelation;
+  }
+  if (state.metricField) {
+    recordsQuery.orderByFields = [`${state.metricField.name} ${state.order.toUpperCase()}`];
+  }
+  recordsQuery.outFields = ["*"];
+  recordsQuery.num = 500;
+  recordsQuery.returnGeometry = false;
+  const recordsResult = await layer.queryFeatures(recordsQuery);
+  const records = buildRecordsFromFeatures(recordsResult.features, state.fields, state.labelField);
+
   return {
-    resultText: `He seleccionado <b>${result.features.length}</b> elemento(s) en <b>${layer.title}</b>${filterSuffix}. Se han resaltado en el mapa.`
+    resultText: `He seleccionado <b>${result.features.length}</b> elemento(s) en <b>${layer.title}</b>${filterSuffix}. Se han resaltado en el mapa.`,
+    records,
+    layerTitle: layer.title,
+    totalCount: result.features.length
   };
 }
 
@@ -165,6 +250,19 @@ const graph = new StateGraph(SelectFeaturesState)
   .addEdge("executeSelection", END);
 
 const selectFeaturesGraph = graph.compile();
+
+function buildSelectFeaturesResult(finalState) {
+  if (!finalState.resultText) return "No he podido completar la selección.";
+  if (finalState.records?.length) {
+    return {
+      resultText: finalState.resultText,
+      records: finalState.records,
+      layerTitle: finalState.layerTitle,
+      totalCount: finalState.totalCount
+    };
+  }
+  return finalState.resultText;
+}
 
 export async function runSelectFeaturesGraph(view, userPrompt, history = []) {
   const availableLayers = view.map.layers.toArray();
@@ -182,7 +280,7 @@ export async function runSelectFeaturesGraph(view, userPrompt, history = []) {
       options: layerResult.options,
       resume: async (chosenLayerId) => {
         const finalState = await selectFeaturesGraph.invoke({ userPrompt, view, selectedLayerId: chosenLayerId, history });
-        return finalState.resultText || "No he podido completar la selección.";
+        return buildSelectFeaturesResult(finalState);
       }
     };
   }
@@ -193,5 +291,5 @@ export async function runSelectFeaturesGraph(view, userPrompt, history = []) {
     selectedLayerId: layerResult.selectedLayerId,
     history
   });
-  return finalState.resultText || "No he podido completar la selección.";
+  return buildSelectFeaturesResult(finalState);
 }

@@ -41,10 +41,122 @@ html, body, #root {
 }
 
 .map-column {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1;
   min-width: 0;
+}
+
+.query-results-panel {
+  position: absolute;
+  top: 76px;
+  left: 12px;
+  width: min(340px, calc(100% - 24px));
+  max-height: calc(100% - 100px);
+  background-color: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  z-index: 15;
+  overflow: hidden;
+}
+
+.query-results-header {
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--geocoder-blue);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.query-results-close {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.query-results-close:hover {
+  color: #fff;
+}
+
+.query-results-count {
+  padding: 8px 14px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.query-results-list {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.query-results-record {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.query-results-record:last-child {
+  border-bottom: none;
+}
+
+.query-results-record-title {
+  color: var(--accent-teal);
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+}
+
+.query-results-record-fields {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+}
+
+.query-results-field-row {
+  display: contents;
+}
+
+.query-results-field-row dt {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.query-results-field-row dd {
+  color: var(--text-main);
+  font-size: 0.8rem;
+  margin: 0;
+  word-break: break-word;
+}
+
+.query-results-show-more {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border-color);
+  color: var(--accent-teal);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+}
+
+.query-results-show-more:hover {
+  background-color: rgba(0, 230, 195, 0.08);
+  color: var(--accent-hover);
 }
 
 .attribute-table-panel {

@@ -11,6 +11,7 @@ import {
   resolveAmbiguousValue,
   formatConversationHistory
 } from "./sharedNodes.js";
+import { setLastBuffer } from "../mapActions/lastBufferState.js";
 
 const DEFAULT_DISTANCE_KM = 5;
 
@@ -91,6 +92,7 @@ async function executeBufferNode(state) {
 
   const feature = result.features[0];
   const bufferGeom = geometryEngine.geodesicBuffer(feature.geometry, distanceKm, "kilometers");
+  setLastBuffer(bufferGeom, `buffer de ${distanceKm} km sobre ${entityValue}`);
 
   const graphic = new Graphic({
     geometry: bufferGeom,
