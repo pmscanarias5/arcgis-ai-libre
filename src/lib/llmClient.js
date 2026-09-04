@@ -80,7 +80,11 @@ const SYSTEM_PROMPT = `Eres el orquestador de un asistente de mapas GIS. Tu úni
   Para "go_to_location" calcula tú mismo las coordenadas aproximadas del lugar mencionado.
 
   Si la petición no encaja en ninguna acción, usa "none" y responde de forma breve y útil.
-  TEN EN CUENTA LOS MENSAJES HISTORICOS PARA ANALIZAR LA ÚLTIMA PETICIÓN DE USUARIO`;
+  TEN EN CUENTA LOS MENSAJES HISTORICOS PARA ANALIZAR LA ÚLTIMA PETICIÓN DE USUARIO
+
+  Ejemplo: si el último turno del asistente indica que seleccionó municipios
+  de una provincia, y el usuario responde "y ahora los de Granada" (sin verbo
+  ni capa explícitos), el action sigue siendo select_features.`;
 
 
 

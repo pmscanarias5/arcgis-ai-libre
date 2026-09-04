@@ -2,6 +2,23 @@ import { callStructuredLLM } from "../llm/callStructuredLLM.js";
 import { ResolveCandidateSchema, SelectLayerSchema } from "../llm/schemas.js";
 import { describeLayersForPrompt } from "./layerCatalog.js";
 
+/**
+ * Formatea el historial de conversación (turnos {role, content}) como un
+ * bloque de texto etiquetado para insertar dentro de un prompt de
+ * extracción de un único disparo (no como mensajes de chat adicionales):
+ * estas tareas devuelven JSON estricto contra un modelo pequeño, así que
+ * conviene que el historial se lea como contexto de fondo a rellenar, no
+ * como una conversación a continuar. Devuelve "" si no hay historial, de
+ * forma que no cambia nada en el primer turno de una conversación.
+ */
+export function formatConversationHistory(history = []) {
+  if (!Array.isArray(history) || history.length === 0) return "";
+  const lines = history.map((h) => `${h.role === "user" ? "Usuario" : "Asistente"}: ${h.content}`);
+  return `Contexto de la conversación anterior (úsalo SOLO para completar lo que la
+petición actual no mencione explícitamente; si la petición actual da un dato
+nuevo, ese dato nuevo tiene siempre prioridad):\n${lines.join("\n")}\n\n`;
+}
+
 export function normalize(str) {
   return (str || "")
     .toString()
@@ -174,6 +191,13 @@ de sus datos: úsalos para razonar qué capa encaja mejor (p.ej. si la petición
 menciona "el Tajo" y una capa tiene entre sus ejemplos "Tajo", es esa capa), no
 te quedes solo con el título.
 
+Si la petición actual no menciona ninguna capa ni ningún dato que permita
+identificarla, pero el contexto de la conversación anterior sí deja claro
+sobre qué capa se estaba trabajando, elige esa misma capa.
+Ejemplo: contexto "Asistente: He seleccionado 3 elemento(s) en Municipios
+(provincia = Madrid)." + petición actual "y ahora los de Granada" -> layer_id
+de Municipios (la petición no nombra ninguna capa, pero la conversación ya la fija).
+
 Responde solo con JSON, sin texto adicional:
 {"layer_id":"<id exacto de la lista>"} si encuentras una coincidencia razonable
 {"layer_id":null} si ninguna capa de la lista encaja con la petición`;
@@ -185,11 +209,15 @@ Responde solo con JSON, sin texto adicional:
  * si el LLM decide con confianza, o { needsSelection: true, options } (con
  * options ya en forma serializable {id, title}, la que consume la UI del
  * chat) si hace falta preguntar al usuario.
+ *
+ * "history" (opcional) es el historial reciente de la conversación: permite
+ * resolver la capa cuando la petición actual, por ser una continuación
+ * ("y ahora los de Granada"), no la menciona explícitamente.
  */
-export async function resolveLayer(userPrompt, layers) {
+export async function resolveLayer(userPrompt, layers, history = []) {
   const options = layers.map((l) => ({ id: l.id, title: l.title }));
   const layersDescription = await describeLayersForPrompt(layers);
-  const userContent = `Capas cargadas en el mapa:\n${layersDescription}\n\nPetición del usuario: "${userPrompt}"`;
+  const userContent = `${formatConversationHistory(history)}Capas cargadas en el mapa:\n${layersDescription}\n\nPetición del usuario: "${userPrompt}"`;
 
   const result = await callStructuredLLM(
     SELECT_LAYER_PROMPT,

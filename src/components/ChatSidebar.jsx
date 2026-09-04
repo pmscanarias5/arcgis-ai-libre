@@ -37,6 +37,9 @@ export default function ChatSidebar({ view }) {
   //   necesita que el usuario elija una opción (botones) antes de seguir.
   async function handleAgentResult(result) {
     if (result && typeof result === "object" && result.needsInput) {
+      // No se guarda nada en el historial aquí: todavía no es el texto
+      // final, solo la pregunta de desambiguación. Se guardará cuando el
+      // usuario elija y resume() produzca el resultado definitivo.
       const messageId = addMessage("bot", result.question);
       setMessages((prev) =>
         prev.map((m) =>
@@ -65,6 +68,13 @@ export default function ChatSidebar({ view }) {
       return;
     }
 
+    // Se guarda aquí, no al recibir el intent: es el único punto en el que
+    // ya se conoce el texto en lenguaje natural del resultado (rico en
+    // contexto: capa, filtro, métrica...), tanto si llega directo como tras
+    // resolver una desambiguación.
+    historyRef.current.push({ role: "assistant", content: typeof result === "string" ? result : JSON.stringify(result) });
+    historyRef.current = historyRef.current.slice(-10);
+
     addMessage("bot", result);
   }
 
@@ -84,11 +94,9 @@ export default function ChatSidebar({ view }) {
 
       const intent = await getIntent(prompt, historyRef.current);
       historyRef.current.push({ role: "user", content: prompt });
-      historyRef.current.push({ role: "assistant", content: JSON.stringify(intent) });
-      historyRef.current = historyRef.current.slice(-10);
 
       const action = mapActions[intent.action] || mapActions.none;
-      const result = await action(view, { ...(intent.params || {}), _userPrompt: prompt });
+      const result = await action(view, { ...(intent.params || {}), _userPrompt: prompt, _history: historyRef.current });
       await handleAgentResult(result);
     } catch (err) {
       console.error("Error al procesar la petición:", err);

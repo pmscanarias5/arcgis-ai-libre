@@ -8,13 +8,15 @@ import {
   loadSchemaNode,
   findLabelField,
   searchDistinctValues,
-  resolveAmbiguousValue
+  resolveAmbiguousValue,
+  formatConversationHistory
 } from "./sharedNodes.js";
 
 const DEFAULT_DISTANCE_KM = 5;
 
 const BufferEntityState = Annotation.Root({
   userPrompt: Annotation(),
+  history: Annotation(),
   view: Annotation(),
   selectedLayerId: Annotation(),
   layer: Annotation(),
@@ -32,6 +34,16 @@ que probablemente aparezca en el dato real (puedes omitir tildes o palabras gen�
 como "municipio de").
 En el caso de los ríos, debes usar el nombre del río directamente, por ejemplo quedate únicamente con "Ebro" o "Duero", aunque se te diga río Ebro o río Duero.
 
+Si la petición actual solo cambia la entidad o solo la distancia y omite el
+resto, recupera el dato que falte del contexto de la conversación anterior;
+lo que la petición actual SÍ mencione tiene siempre prioridad.
+Ejemplo: contexto "Asistente: ... área de influencia de 10 km sobre Madrid
+..." + petición actual "y ahora sobre Sevilla" -> search_text:"Sevilla",
+distance_km:10.
+Ejemplo: contexto "Asistente: ... área de influencia de 10 km sobre Madrid
+..." + petición actual "hazlo de 20km" -> search_text:"Madrid",
+distance_km:20.
+
 Responde solo con JSON, sin texto adicional:
 {"search_text":"<fragmento de búsqueda>","distance_km":<num, o null si no se menciona>}`;
 
@@ -42,7 +54,7 @@ async function buildEntityQueryNode(state) {
   }
 
   const extraction = await callStructuredLLM(EXTRACT_SEARCH_TEXT_PROMPT, [
-    { role: "user", content: `Petición del usuario: "${state.userPrompt}"` }
+    { role: "user", content: `${formatConversationHistory(state.history)}Petición del usuario: "${state.userPrompt}"` }
   ], ExtractSearchTextSchema);
 
   const searchText = extraction?.search_text?.trim();
@@ -109,14 +121,14 @@ const graph = new StateGraph(BufferEntityState)
 
 const bufferEntityGraph = graph.compile();
 
-export async function runBufferEntityGraph(view, userPrompt) {
+export async function runBufferEntityGraph(view, userPrompt, history = []) {
   const availableLayers = view.map.layers.toArray();
 
   if (availableLayers.length === 0) {
     return "No hay ninguna capa operativa cargada en el mapa todavía.";
   }
 
-  const layerResult = await resolveLayer(userPrompt, availableLayers);
+  const layerResult = await resolveLayer(userPrompt, availableLayers, history);
 
   if (layerResult.needsSelection) {
     return {
@@ -124,7 +136,7 @@ export async function runBufferEntityGraph(view, userPrompt) {
       question: "No he identificado con certeza a qué capa te refieres. ¿Cuál de estas es?",
       options: layerResult.options,
       resume: async (chosenLayerId) => {
-        const finalState = await bufferEntityGraph.invoke({ userPrompt, view, selectedLayerId: chosenLayerId });
+        const finalState = await bufferEntityGraph.invoke({ userPrompt, view, selectedLayerId: chosenLayerId, history });
         return finalState.resultText || "No he podido completar el área de influencia.";
       }
     };
@@ -133,7 +145,8 @@ export async function runBufferEntityGraph(view, userPrompt) {
   const finalState = await bufferEntityGraph.invoke({
     userPrompt,
     view,
-    selectedLayerId: layerResult.selectedLayerId
+    selectedLayerId: layerResult.selectedLayerId,
+    history
   });
   return finalState.resultText || "No he podido completar el área de influencia.";
 }

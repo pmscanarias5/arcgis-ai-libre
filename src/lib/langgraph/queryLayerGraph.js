@@ -6,12 +6,14 @@ import {
   loadSchemaNode,
   findLabelField,
   findBestField,
-  resolveFilters
+  resolveFilters,
+  formatConversationHistory
 } from "./sharedNodes.js";
 import { getLayerProfile, describeFieldsForPrompt } from "./layerCatalog.js";
 
 const QueryLayerState = Annotation.Root({
   userPrompt: Annotation(),
+  history: Annotation(),
   view: Annotation(),
   selectedLayerId: Annotation(),
   layer: Annotation(),
@@ -78,7 +80,20 @@ de Cádiz con más de 20000 habitantes" -> filter_groups:[
 ]
 
 "order" es "desc" para el valor mayor (más poblado, máximo) o "asc" para el menor.
-Por defecto "desc" y limit 1.`;
+Por defecto "desc" y limit 1.
+
+Si la petición actual solo cambia un detalle (el lugar, el orden, el número
+de elementos...) y omite el resto, recupera lo que falte del contexto de la
+conversación anterior; lo que la petición actual SÍ mencione tiene siempre
+prioridad sobre el contexto.
+Ejemplo: contexto "Asistente: He seleccionado los 3 municipios con mayor
+superficie en Municipios (provincia = Madrid)." + petición actual "y ahora
+los de Granada" -> metric_field_hint:"superficie", order:"desc", limit:3,
+filter_groups:[{"conditions":[{"field_hint":"provincia","value_hint":"Granada","operator":"="}]}]
+Ejemplo: contexto "Asistente: ... el municipio más poblado en Municipios
+(provincia = Madrid) ..." + petición actual "¿y el menos poblado?" ->
+metric_field_hint:"poblacion", order:"asc" (se invierte), limit igual que
+antes, filter_groups igual que antes (provincia = Madrid, aunque no se repita).`;
 
 
 
@@ -86,7 +101,7 @@ async function buildQueryNode(state) {
   const profile = await getLayerProfile(state.layer);
   const fieldsDescription = describeFieldsForPrompt(profile);
 
-  const userContent = `Campos disponibles en la capa "${state.layer.title}":\n${fieldsDescription}\n\nPetición del usuario: "${state.userPrompt}"`;
+  const userContent = `${formatConversationHistory(state.history)}Campos disponibles en la capa "${state.layer.title}":\n${fieldsDescription}\n\nPetición del usuario: "${state.userPrompt}"`;
   const result = await callStructuredLLM(BUILD_QUERY_PROMPT, [{ role: "user", content: userContent }], BuildQuerySchema);
 
   const metricField = result?.metric_field_hint ? findBestField(state.fields, result.metric_field_hint) : null;
@@ -167,14 +182,14 @@ const graph = new StateGraph(QueryLayerState)
 
 const queryLayerGraph = graph.compile();
 
-export async function runQueryLayerGraph(view, userPrompt) {
+export async function runQueryLayerGraph(view, userPrompt, history = []) {
   const availableLayers = view.map.layers.toArray();
 
   if (availableLayers.length === 0) {
     return "No hay ninguna capa operativa cargada en el mapa todavía.";
   }
 
-  const layerResult = await resolveLayer(userPrompt, availableLayers);
+  const layerResult = await resolveLayer(userPrompt, availableLayers, history);
 
   if (layerResult.needsSelection) {
     return {
@@ -182,7 +197,7 @@ export async function runQueryLayerGraph(view, userPrompt) {
       question: "No he identificado con certeza a qué capa te refieres. ¿Cuál de estas es?",
       options: layerResult.options,
       resume: async (chosenLayerId) => {
-        const finalState = await queryLayerGraph.invoke({ userPrompt, view, selectedLayerId: chosenLayerId });
+        const finalState = await queryLayerGraph.invoke({ userPrompt, view, selectedLayerId: chosenLayerId, history });
         return finalState.resultText || "No he podido completar la consulta.";
       }
     };
@@ -191,7 +206,8 @@ export async function runQueryLayerGraph(view, userPrompt) {
   const finalState = await queryLayerGraph.invoke({
     userPrompt,
     view,
-    selectedLayerId: layerResult.selectedLayerId
+    selectedLayerId: layerResult.selectedLayerId,
+    history
   });
   return finalState.resultText || "No he podido completar la consulta.";
 }
