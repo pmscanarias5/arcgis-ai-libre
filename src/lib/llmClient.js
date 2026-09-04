@@ -61,6 +61,9 @@ const SYSTEM_PROMPT = `Eres el orquestador de un asistente de mapas GIS. Tu úni
     "mínimo", "cuántos/as", o pide un ranking/comparación → es "query_layer".
     Si en cambio nombra directamente el lugar al que ir → es "go_to_location".
 
+    Ojo: "más de X" / "menos de X" como umbral de un filtro (p.ej. "con más de
+    1000 metros de altitud") no es por sí solo un ranking.
+
 
 
   REGLA para elegir "clear_selection" (quitar la selección previa):

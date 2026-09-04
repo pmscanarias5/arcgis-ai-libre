@@ -16,10 +16,20 @@ export default function AttributeTablePanel({ view, layer, onClose }) {
   const containerRef = useRef(null);
   const panelRef = useRef(null);
   const dragStateRef = useRef(null);
+  const tableRef = useRef(null);
   const [totalCount, setTotalCount] = useState(null);
   const [selectedCount, setSelectedCount] = useState(0);
+  const [filterBySelection, setFilterBySelection] = useState(false);
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
   const [isDragging, setIsDragging] = useState(false);
+
+  function toggleFilterBySelection() {
+    const table = tableRef.current;
+    if (!table) return;
+    const next = !table.filterBySelectionEnabled;
+    table.filterBySelectionEnabled = next;
+    setFilterBySelection(next);
+  }
 
   const handleResizeMove = (event) => {
     const dragState = dragStateRef.current;
@@ -60,12 +70,14 @@ export default function AttributeTablePanel({ view, layer, onClose }) {
 
     setTotalCount(null);
     setSelectedCount(0);
+    setFilterBySelection(false);
 
     const table = new FeatureTable({
       view,
       layer,
       container: containerRef.current
     });
+    tableRef.current = table;
 
     // Se registra la tabla para que una selección hecha por chat mientras
     // está abierta se aplique a través de ella (ver selectionSync.js), y
@@ -77,19 +89,14 @@ export default function AttributeTablePanel({ view, layer, onClose }) {
       .then(setTotalCount)
       .catch(() => setTotalCount(null));
 
-    // Si ya había una selección activa en esta capa (hecha antes por chat),
-    // se traslada a la tabla al abrirla para que aparezca ya marcada.
-    const existingObjectIds = getSelectionObjectIds(layer.id);
-    if (existingObjectIds?.length) {
-      table.highlightIds.addMany(existingObjectIds);
-    }
-
     // La selección de filas en la tabla resalta entidades en el mapa con su
     // propio mecanismo (table.highlightIds), independiente del que usan las
     // selecciones por chat. La reflejamos aquí en el mismo registro
     // compartido (selectionState) para que el botón de borrar selección del
     // mapa se ilumine, pueda quitarla, y una selección hecha por chat sepa
-    // que la tabla la posee.
+    // que la tabla la posee. Se registra ANTES de tocar highlightIds más
+    // abajo para que el "change" inicial (al restaurar una selección previa)
+    // también dispare setSelectedCount y aparezca el botón de filtro.
     let hasActiveSelection = false;
     const highlightChangeHandle = table.highlightIds.on("change", () => {
       const objectIds = [...table.highlightIds];
@@ -108,9 +115,36 @@ export default function AttributeTablePanel({ view, layer, onClose }) {
         hasActiveSelection = false;
         clearSelectionHighlight(layer.id);
       }
+
+      // Si la selección se queda a cero (p.ej. "Anular selección de todos"
+      // desde el menú nativo de los "...") y el filtro "solo seleccionadas"
+      // seguía activo, ya no quedaría ninguna fila visible: se desactiva
+      // para volver a mostrar todos los registros.
+      if (!hasSelection && table.filterBySelectionEnabled) {
+        table.filterBySelectionEnabled = false;
+        setFilterBySelection(false);
+      }
     });
 
+    // Si ya había una selección activa en esta capa (hecha antes por chat),
+    // se traslada a la tabla al abrirla para que aparezca ya marcada, y se
+    // activa el filtro nativo "Mostrar selección" (filterBySelectionEnabled)
+    // para que se vea directamente sin tener que pulsarlo a mano. (Se probó
+    // reordenar la tabla vía "objectIds" para que la selección apareciera
+    // arriba manteniendo el resto de filas visibles, pero no se aplicaba de
+    // forma fiable; filterBySelectionEnabled es la vía soportada y sí
+    // funciona, aunque en vez de "seleccionados primero" filtra a "solo
+    // seleccionados" — el propio botón nativo de la tabla permite quitar el
+    // filtro para volver a ver todas las filas.)
+    const existingObjectIds = getSelectionObjectIds(layer.id);
+    if (existingObjectIds?.length) {
+      table.highlightIds.addMany(existingObjectIds);
+      table.filterBySelectionEnabled = true;
+      setFilterBySelection(true);
+    }
+
     return () => {
+      tableRef.current = null;
       highlightChangeHandle.remove();
       unregisterFeatureTable(layer.id, table);
 
@@ -151,6 +185,11 @@ export default function AttributeTablePanel({ view, layer, onClose }) {
           {totalCount != null ? `${totalCount} entidad(es)` : "Cargando…"}
           {selectedCount > 0 ? ` · ${selectedCount} seleccionada(s)` : ""}
         </span>
+        {selectedCount > 0 && (
+          <button type="button" className="attribute-table-toggle-filter" onClick={toggleFilterBySelection}>
+            {filterBySelection ? "Mostrar todo" : "Mostrar solo la selección"}
+          </button>
+        )}
       </div>
     </div>
   );

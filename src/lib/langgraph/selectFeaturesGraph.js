@@ -6,10 +6,8 @@ import {
   loadSchemaNode,
   resolveFilters,
   findBestField,
-  findLabelField,
   formatConversationHistory,
-  resolveSpatialFilter,
-  buildRecordsFromFeatures
+  resolveSpatialFilter
 } from "./sharedNodes.js";
 import { getLayerProfile, describeFieldsForPrompt } from "./layerCatalog.js";
 import { applySelection } from "../mapActions/selectionSync.js";
@@ -24,14 +22,11 @@ const SelectFeaturesState = Annotation.Root({
   whereClause: Annotation(),
   filterDescription: Annotation(),
   metricField: Annotation(),
-  labelField: Annotation(),
   order: Annotation(),
   limit: Annotation(),
   spatialGeometry: Annotation(),
   spatialRelation: Annotation(),
   spatialDescription: Annotation(),
-  records: Annotation(),
-  totalCount: Annotation(),
   resultText: Annotation()
 });
 
@@ -140,7 +135,6 @@ async function buildSelectionNode(state) {
   const result = await callStructuredLLM(SELECT_FEATURES_PROMPT, [{ role: "user", content: userContent }], SelectFeaturesSchema);
 
   const metricField = result?.metric_field_hint ? findBestField(state.fields, result.metric_field_hint) : null;
-  const labelField = findLabelField(state.fields, state.layer.displayField);
   const order = result?.order === "asc" ? "asc" : "desc";
   const limit = metricField && result?.limit ? Math.max(1, Math.min(result.limit, 50)) : null;
 
@@ -167,7 +161,6 @@ async function buildSelectionNode(state) {
     whereClause: filterClause || "1=1",
     filterDescription,
     metricField,
-    labelField,
     order,
     limit,
     spatialGeometry,
@@ -214,29 +207,8 @@ async function executeSelectionNode(state) {
     await view.goTo(geometries);
   }
 
-  // Consulta aparte, acotada, solo para el panel informativo: la selección
-  // y el resaltado ya se han hecho arriba sobre TODAS las entidades
-  // encontradas (result.features), esto no las limita en absoluto.
-  const recordsQuery = layer.createQuery();
-  recordsQuery.where = state.whereClause;
-  if (state.spatialGeometry) {
-    recordsQuery.geometry = state.spatialGeometry;
-    recordsQuery.spatialRelationship = state.spatialRelation;
-  }
-  if (state.metricField) {
-    recordsQuery.orderByFields = [`${state.metricField.name} ${state.order.toUpperCase()}`];
-  }
-  recordsQuery.outFields = ["*"];
-  recordsQuery.num = 500;
-  recordsQuery.returnGeometry = false;
-  const recordsResult = await layer.queryFeatures(recordsQuery);
-  const records = buildRecordsFromFeatures(recordsResult.features, state.fields, state.labelField);
-
   return {
-    resultText: `He seleccionado <b>${result.features.length}</b> elemento(s) en <b>${layer.title}</b>${filterSuffix}. Se han resaltado en el mapa.`,
-    records,
-    layerTitle: layer.title,
-    totalCount: result.features.length
+    resultText: `He seleccionado <b>${result.features.length}</b> elemento(s) en <b>${layer.title}</b>${filterSuffix}. Se han resaltado en el mapa. Puedes abrir la tabla de atributos de la capa para ver el detalle de cada entidad.`
   };
 }
 
@@ -250,19 +222,6 @@ const graph = new StateGraph(SelectFeaturesState)
   .addEdge("executeSelection", END);
 
 const selectFeaturesGraph = graph.compile();
-
-function buildSelectFeaturesResult(finalState) {
-  if (!finalState.resultText) return "No he podido completar la selección.";
-  if (finalState.records?.length) {
-    return {
-      resultText: finalState.resultText,
-      records: finalState.records,
-      layerTitle: finalState.layerTitle,
-      totalCount: finalState.totalCount
-    };
-  }
-  return finalState.resultText;
-}
 
 export async function runSelectFeaturesGraph(view, userPrompt, history = []) {
   const availableLayers = view.map.layers.toArray();
@@ -280,7 +239,7 @@ export async function runSelectFeaturesGraph(view, userPrompt, history = []) {
       options: layerResult.options,
       resume: async (chosenLayerId) => {
         const finalState = await selectFeaturesGraph.invoke({ userPrompt, view, selectedLayerId: chosenLayerId, history });
-        return buildSelectFeaturesResult(finalState);
+        return finalState.resultText || "No he podido completar la selección.";
       }
     };
   }
@@ -291,5 +250,5 @@ export async function runSelectFeaturesGraph(view, userPrompt, history = []) {
     selectedLayerId: layerResult.selectedLayerId,
     history
   });
-  return buildSelectFeaturesResult(finalState);
+  return finalState.resultText || "No he podido completar la selección.";
 }

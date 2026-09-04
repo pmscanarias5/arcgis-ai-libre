@@ -24,6 +24,7 @@ const QueryLayerState = Annotation.Root({
   labelField: Annotation(),
   order: Annotation(),
   limit: Annotation(),
+  countOnly: Annotation(),
   whereClause: Annotation(),
   filterDescription: Annotation(),
   spatialGeometry: Annotation(),
@@ -31,6 +32,7 @@ const QueryLayerState = Annotation.Root({
   spatialDescription: Annotation(),
   records: Annotation(),
   totalCount: Annotation(),
+  loadMoreRecords: Annotation(),
   resultText: Annotation()
 });
 
@@ -43,12 +45,31 @@ de emparejarlas con el campo real.
 
 Responde solo con JSON, sin texto adicional:
 {
-  "metric_field_hint":"<palabra clave del campo a analizar, o null si solo se pide contar>",
+  "metric_field_hint":"<palabra clave del campo a analizar, o null si no se pide un ranking>",
   "order":"desc|asc",
   "limit":<num entre 1 y 10>,
   "filter_groups":[{"conditions":[{"field_hint":"<palabra clave del campo>","value_hint":"<valor>","operator":"=|>|>=|<|<=|!="}]}],
-  "spatial_filter":null
+  "spatial_filter":null,
+  "count_only":false
 }
+
+"metric_field_hint" y "count_only" son preguntas independientes: la ausencia
+de una métrica de ranking NO significa que el usuario solo quiera un número.
+Añade "count_only":true SOLO si pide explícitamente una cantidad ("cuántos",
+"cuántas", "número de", "total de"). Si pide ver o saber CUÁLES son las
+entidades — aunque no haya ranking ni superlativos — usa "count_only":false
+para que se devuelva el listado completo.
+
+Ejemplo: "¿cuántos municipios hay en Lleida?" -> metric_field_hint:null,
+count_only:true
+
+Ejemplo: "¿cuáles son los municipios de Lleida con más de 1000 metros de
+altitud?" -> metric_field_hint:null, count_only:false, filter_groups:[
+  {"conditions":[
+    {"field_hint":"provincia","value_hint":"Lleida","operator":"="},
+    {"field_hint":"altura","value_hint":"1000","operator":">"}
+  ]}
+]
 
 "filter_groups" es una lista de grupos de condiciones que restringen los resultados.
 Las condiciones DENTRO de un mismo grupo se combinan con AND. Los distintos grupos
@@ -140,6 +161,7 @@ async function buildQueryNode(state) {
   const order = result?.order === "asc" ? "asc" : "desc";
   const limit = Math.max(1, Math.min(result?.limit || 1, 10));
   const labelField = findLabelField(state.fields, state.layer.displayField);
+  const countOnly = result?.count_only ?? false;
 
   const { whereClause: filterClause, filterDescription } = await resolveFilters(state, result?.filter_groups);
 
@@ -159,15 +181,17 @@ async function buildQueryNode(state) {
   const baseClause = metricField ? `${metricField.name} IS NOT NULL` : "1=1";
   const whereClause = filterClause ? `${baseClause} AND ${filterClause}` : baseClause;
 
-  return { metricField, labelField, order, limit, whereClause, filterDescription, spatialGeometry, spatialRelation, spatialDescription };
+  return { metricField, labelField, order, limit, countOnly, whereClause, filterDescription, spatialGeometry, spatialRelation, spatialDescription };
 }
+
+const RECORDS_PAGE_SIZE = 50;
 
 async function executeQueryNode(state) {
   const { layer, view } = state;
   const descriptionParts = [state.filterDescription, state.spatialDescription].filter(Boolean);
   const filterSuffix = descriptionParts.length ? ` (${descriptionParts.join(", ")})` : "";
 
-  if (!state.metricField) {
+  if (!state.metricField && state.countOnly) {
     const countQuery = layer.createQuery();
     countQuery.where = state.whereClause;
     if (state.spatialGeometry) {
@@ -184,31 +208,63 @@ async function executeQueryNode(state) {
     query.geometry = state.spatialGeometry;
     query.spatialRelationship = state.spatialRelation;
   }
-  query.orderByFields = [`${state.metricField.name} ${state.order.toUpperCase()}`];
   query.outFields = ["*"];
-  query.num = state.limit;
   query.returnGeometry = true;
+
+  // Listado sin ranking (p.ej. "¿cuáles son los municipios de Lleida con más
+  // de 1000m de altitud?"): se trae solo la primera página (RECORDS_PAGE_SIZE)
+  // para responder rápido; el resto solo se pide si el usuario pulsa
+  // "Mostrar más" en el panel (ver loadMoreRecords más abajo). El conteo real
+  // se pide aparte (queryFeatureCount, barato) para saber cuántas hay en
+  // total sin tener que traerlas todas.
+  let totalCount;
+  if (state.metricField) {
+    query.orderByFields = [`${state.metricField.name} ${state.order.toUpperCase()}`];
+    query.num = state.limit;
+  } else {
+    query.num = RECORDS_PAGE_SIZE;
+    const countQuery = layer.createQuery();
+    countQuery.where = state.whereClause;
+    if (state.spatialGeometry) {
+      countQuery.geometry = state.spatialGeometry;
+      countQuery.spatialRelationship = state.spatialRelation;
+    }
+    totalCount = await layer.queryFeatureCount(countQuery);
+  }
 
   const result = await layer.queryFeatures(query);
   if (!result.features.length) {
     return { resultText: `No he encontrado datos en <b>${layer.title}</b>${filterSuffix} para lo que pides.` };
   }
 
-  const records = buildRecordsFromFeatures(result.features, state.fields, state.labelField);
+  if (state.metricField) {
+    totalCount = result.features.length;
+  }
 
-  const items = result.features
-    .map((f) => {
-      const label = state.labelField ? f.attributes[state.labelField.name] : "—";
-      const value = f.attributes[state.metricField.name];
-      return `<li>${label}: <b>${value}</b></li>`;
-    })
-    .join("");
+  const records = buildRecordsFromFeatures(result.features, state.fields, state.labelField, {
+    limit: RECORDS_PAGE_SIZE
+  });
 
-  const qualifier = state.order === "desc" ? "mayor" : "menor";
-  const heading =
-    state.limit === 1
-      ? `El elemento con ${qualifier} <b>${state.metricField.alias || state.metricField.name}</b> en <b>${layer.title}</b>${filterSuffix}`
-      : `Los ${state.limit} elementos con ${qualifier} <b>${state.metricField.alias || state.metricField.name}</b> en <b>${layer.title}</b>${filterSuffix}`;
+  let resultText;
+  if (state.metricField) {
+    const items = result.features
+      .map((f) => {
+        const label = state.labelField ? f.attributes[state.labelField.name] : "—";
+        const value = f.attributes[state.metricField.name];
+        return `<li>${label}: <b>${value}</b></li>`;
+      })
+      .join("");
+
+    const qualifier = state.order === "desc" ? "mayor" : "menor";
+    const heading =
+      state.limit === 1
+        ? `El elemento con ${qualifier} <b>${state.metricField.alias || state.metricField.name}</b> en <b>${layer.title}</b>${filterSuffix}`
+        : `Los ${state.limit} elementos con ${qualifier} <b>${state.metricField.alias || state.metricField.name}</b> en <b>${layer.title}</b>${filterSuffix}`;
+
+    resultText = `${heading}:<ul>${items}</ul>`;
+  } else {
+    resultText = `He encontrado <b>${totalCount}</b> elemento(s) en <b>${layer.title}</b>${filterSuffix}.`;
+  }
 
   const geometries = result.features.map((f) => f.geometry).filter(Boolean);
   if (geometries.length === 1) {
@@ -222,11 +278,33 @@ async function executeQueryNode(state) {
     await view.goTo(geometries);
   }
 
+  // Solo el listado sin ranking pagina bajo demanda: el ranking ya está
+  // acotado a como mucho 10 elementos, no necesita "mostrar más".
+  const loadMoreRecords = state.metricField
+    ? undefined
+    : async (offset) => {
+        const moreQuery = layer.createQuery();
+        moreQuery.where = state.whereClause;
+        if (state.spatialGeometry) {
+          moreQuery.geometry = state.spatialGeometry;
+          moreQuery.spatialRelationship = state.spatialRelation;
+        }
+        moreQuery.outFields = ["*"];
+        moreQuery.returnGeometry = false;
+        moreQuery.start = offset;
+        moreQuery.num = RECORDS_PAGE_SIZE;
+        const moreResult = await layer.queryFeatures(moreQuery);
+        return buildRecordsFromFeatures(moreResult.features, state.fields, state.labelField, {
+          limit: RECORDS_PAGE_SIZE
+        });
+      };
+
   return {
-    resultText: `${heading}:<ul>${items}</ul>`,
+    resultText,
     records,
     layerTitle: layer.title,
-    totalCount: result.features.length
+    totalCount,
+    loadMoreRecords
   };
 }
 
@@ -248,7 +326,8 @@ function buildQueryLayerResult(finalState) {
       resultText: finalState.resultText,
       records: finalState.records,
       layerTitle: finalState.layerTitle,
-      totalCount: finalState.totalCount
+      totalCount: finalState.totalCount,
+      loadMoreRecords: finalState.loadMoreRecords
     };
   }
   return finalState.resultText;

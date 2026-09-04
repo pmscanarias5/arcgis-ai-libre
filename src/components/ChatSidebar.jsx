@@ -86,7 +86,12 @@ export default function ChatSidebar({ view, onResults }) {
     addMessage("bot", chatText);
 
     if (hasRecords && result.records?.length && onResults) {
-      onResults({ records: result.records, layerTitle: result.layerTitle, totalCount: result.totalCount });
+      onResults({
+        records: result.records,
+        layerTitle: result.layerTitle,
+        totalCount: result.totalCount,
+        loadMoreRecords: result.loadMoreRecords
+      });
     }
   }
 

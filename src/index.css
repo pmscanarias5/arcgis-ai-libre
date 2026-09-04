@@ -159,6 +159,12 @@ html, body, #root {
   color: var(--accent-hover);
 }
 
+.query-results-show-more:disabled {
+  color: var(--text-muted);
+  cursor: default;
+  background: none;
+}
+
 .attribute-table-panel {
   min-height: 150px;
   flex-shrink: 0;
@@ -218,10 +224,29 @@ html, body, #root {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   border-top: 1px solid var(--border-color);
   color: var(--text-muted);
   font-size: 0.85rem;
   flex-shrink: 0;
+}
+
+.attribute-table-toggle-filter {
+  background: none;
+  border: 1px solid var(--accent-teal);
+  color: var(--accent-teal);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.attribute-table-toggle-filter:hover {
+  background-color: var(--accent-teal);
+  color: #052423;
 }
 
 .attribute-table-container {

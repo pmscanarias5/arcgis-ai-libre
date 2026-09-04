@@ -49,7 +49,8 @@ export const BuildQuerySchema = z.object({
   order: z.enum(["asc", "desc"]),
   limit: z.number().min(1).max(10),
   filter_groups: z.array(FilterGroupSchema).max(3),
-  spatial_filter: SpatialFilterSchema
+  spatial_filter: SpatialFilterSchema,
+  count_only: z.boolean()
 });
 
 
