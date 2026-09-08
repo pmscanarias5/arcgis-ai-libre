@@ -12,7 +12,7 @@ const DEFAULT_HEIGHT = 300;
 const MIN_HEIGHT = 150;
 const RESIZE_MARGIN = 100; // hueco mínimo que se deja siempre al mapa
 
-export default function AttributeTablePanel({ view, layer, onClose }) {
+export default function AttributeTablePanel({ view, layer, onSelectLayer, onClose }) {
   const containerRef = useRef(null);
   const panelRef = useRef(null);
   const dragStateRef = useRef(null);
@@ -22,6 +22,16 @@ export default function AttributeTablePanel({ view, layer, onClose }) {
   const [filterBySelection, setFilterBySelection] = useState(false);
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
   const [isDragging, setIsDragging] = useState(false);
+  const [availableLayers, setAvailableLayers] = useState([]);
+
+  // Pestañas de la cabecera: todas las capas consultables del mapa, no solo
+  // la que se está viendo. Cambiar de pestaña solo cambia la prop "layer" —
+  // el efecto de más abajo ya se encarga de lanzar la consulta de esa capa,
+  // así que los datos de una capa nunca se piden hasta que se clica en ella.
+  useEffect(() => {
+    if (!view) return;
+    setAvailableLayers(view.map.layers.toArray().filter((l) => typeof l.queryFeatures === "function"));
+  }, [view]);
 
   function toggleFilterBySelection() {
     const table = tableRef.current;
@@ -172,9 +182,18 @@ export default function AttributeTablePanel({ view, layer, onClose }) {
         title="Arrastrar para redimensionar"
       />
       <div className="attribute-table-header">
-        <span>
-          Tabla de atributos: <b>{layer.title}</b>
-        </span>
+        <div className="attribute-table-tabs">
+          {availableLayers.map((l) => (
+            <button
+              key={l.id}
+              type="button"
+              className={`attribute-table-tab${l.id === layer.id ? " active" : ""}`}
+              onClick={() => onSelectLayer(l)}
+            >
+              {l.title}
+            </button>
+          ))}
+        </div>
         <button className="attribute-table-close" onClick={onClose} aria-label="Cerrar tabla de atributos">
           ✕
         </button>

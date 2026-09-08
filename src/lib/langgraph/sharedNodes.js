@@ -17,7 +17,7 @@ export function formatConversationHistory(history = []) {
   const lines = history.map((h) => `${h.role === "user" ? "Usuario" : "Asistente"}: ${h.content}`);
   return `Contexto de la conversación anterior (úsalo SOLO para completar lo que la
 petición actual no mencione explícitamente; si la petición actual da un dato
-nuevo, ese dato nuevo tiene siempre prioridad):\n${lines.join("\n")}\n\n`;
+nuevo, ese dato nuevo tiene siempre prioridad):\n${lines.join("\n")}`;
 }
 
 export function normalize(str) {
@@ -33,7 +33,7 @@ export function findLabelField(fields, displayFieldName) {
     const f = fields.find((f) => f.name === displayFieldName);
     if (f) return f;
   }
-  const candidates = ["nombre", "name", "municipio", "denominacion", "etiqueta", "rotulo", "toponimo"];
+  const candidates = ["nombre", "name", "municipio", "denominacion", "etiqueta", "rotulo", "toponimo", "provincia", "capital"];
   return (
     fields.find((f) => candidates.some((c) => normalize(f.name).includes(c) || normalize(f.alias).includes(c))) ||
     fields.find((f) => f.type === "string") ||
@@ -224,7 +224,13 @@ Responde solo con JSON, sin texto adicional:
 export async function resolveLayer(userPrompt, layers, history = []) {
   const options = layers.map((l) => ({ id: l.id, title: l.title }));
   const layersDescription = await describeLayersForPrompt(layers);
-  const userContent = `${formatConversationHistory(history)}Capas cargadas en el mapa:\n${layersDescription}\n\nPetición del usuario: "${userPrompt}"`;
+  const userContent = [
+    `Petición del usuario: "${userPrompt}"`,
+    `Capas cargadas en el mapa:\n${layersDescription}`,
+    formatConversationHistory(history)
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   const result = await callStructuredLLM(
     SELECT_LAYER_PROMPT,

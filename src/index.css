@@ -197,13 +197,44 @@ html, body, #root {
 }
 
 .attribute-table-header {
-  padding: 10px 16px;
+  padding: 0 12px 0 6px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   border-bottom: 1px solid var(--border-color);
   color: var(--text-main);
   font-size: 0.9rem;
+  overflow: hidden;
+}
+
+.attribute-table-tabs {
+  display: flex;
+  overflow-x: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.attribute-table-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  padding: 12px 14px;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.attribute-table-tab:hover {
+  color: var(--text-main);
+}
+
+.attribute-table-tab.active {
+  color: var(--accent-teal);
+  border-bottom-color: var(--accent-teal);
+  font-weight: 600;
 }
 
 .attribute-table-close {
@@ -313,6 +344,27 @@ html, body, #root {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.chat-clear-context {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.chat-clear-context:hover {
+  color: #fff;
+}
+
+.chat-clear-context:disabled {
+  color: var(--text-muted);
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .chat-header h2 {

@@ -11,6 +11,8 @@
 // implica consultas extra al FeatureServer, así que solo se paga una vez
 // por capa por sesión de navegador.
 
+import { findLabelField } from "./sharedNodes.js";
+
 const profileCache = new Map(); // layer.id -> Promise<Profile>
 
 const IGNORED_FIELD_PATTERNS = [/^objectid$/i, /^shape/i, /^fid$/i, /^globalid$/i];
@@ -77,7 +79,18 @@ async function buildProfile(layer) {
   const ranges = await fetchNumericRanges(layer, numericFields);
 
   const textFields = fields.filter((f) => f.type === "string" && !f.domain);
-  const sampledTextFields = textFields.slice(0, MAX_TEXT_FIELDS_SAMPLED);
+  // El campo de nombre real (misma heurística que ya usan los grafos para
+  // buscar entidades) tiene prioridad para ser muestreado, aunque no esté
+  // entre los primeros MAX_TEXT_FIELDS_SAMPLED del esquema: si no, un campo
+  // de código/ID que aparezca antes en el esquema podría "ganarle el
+  // puesto" y sus valores (IDs) acabarían siendo los "ejemplos" que ve el
+  // LLM en vez del nombre real de las entidades (p.ej. capas de provincias
+  // o capitales de provincia).
+  const labelField = findLabelField(fields, layer.displayField);
+  const prioritizedTextFields = labelField
+    ? [labelField, ...textFields.filter((f) => f.name !== labelField.name)]
+    : textFields;
+  const sampledTextFields = prioritizedTextFields.slice(0, MAX_TEXT_FIELDS_SAMPLED);
   const samples = {};
   for (const field of sampledTextFields) {
     samples[field.name] = await fetchDistinctSamples(layer, field);
@@ -103,7 +116,8 @@ async function buildProfile(layer) {
         type: f.type,
         kind: "sample",
         values: samples[f.name],
-        truncated: samples[f.name].length >= MAX_SAMPLE_VALUES
+        truncated: samples[f.name].length >= MAX_SAMPLE_VALUES,
+        isLabelField: labelField?.name === f.name
       };
     }
     return { name: f.name, alias: f.alias, type: f.type, kind: "unknown" };
@@ -150,7 +164,13 @@ export async function describeLayersForPrompt(layers) {
     layers.map(async (layer) => {
       try {
         const profile = await getLayerProfile(layer);
-        const sampleField = profile.fields.find((f) => f.kind === "sample" || f.kind === "domain");
+        // Prioriza el campo de nombre real (isLabelField) sobre cualquier
+        // otro campo con muestra/dominio: sin esto, un campo de código/ID
+        // que aparezca antes en el esquema podía "ganar" y mostrar IDs como
+        // ejemplos en vez de nombres reales.
+        const sampleField =
+          profile.fields.find((f) => f.isLabelField && (f.kind === "sample" || f.kind === "domain")) ||
+          profile.fields.find((f) => f.kind === "sample" || f.kind === "domain");
         const examples = sampleField ? ` — ejemplos: ${sampleField.values.slice(0, 6).join(", ")}` : "";
         return `- id: "${layer.id}", título: "${layer.title}", geometría: ${profile.geometryType}${examples}`;
       } catch (err) {

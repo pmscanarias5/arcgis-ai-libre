@@ -5,15 +5,15 @@ import { mapActions } from "../lib/mapActions/index.js";
 
 const now = () => new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
+const createWelcomeMessage = () => ({
+  id: "welcome",
+  sender: "bot",
+  text: "¡Hola! Soy tu asistente de mapa. Puedo cambiar el mapa base, ir a una ubicación, consultar capas, crear áreas de influencia o imprimir el mapa.",
+  time: now()
+});
+
 export default function ChatSidebar({ view, onResults }) {
-  const [messages, setMessages] = useState([
-    {
-      id: "welcome",
-      sender: "bot",
-      text: "¡Hola! Soy tu asistente de mapa. Puedo cambiar el mapa base, ir a una ubicación, consultar capas, crear áreas de influencia o imprimir el mapa.",
-      time: now()
-    }
-  ]);
+  const [messages, setMessages] = useState([createWelcomeMessage()]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const historyRef = useRef([]);
@@ -127,11 +127,27 @@ export default function ChatSidebar({ view, onResults }) {
     if (e.key === "Enter") handleSend();
   }
 
+  function handleClearContext() {
+    if (thinking) return;
+    historyRef.current = [];
+    setMessages([createWelcomeMessage()]);
+  }
+
   return (
     <div className="chat-sidebar">
       <div className="chat-header">
         <div className={`status-indicator ${thinking ? "thinking" : ""}`}></div>
         <h2>Asistente GIS (modelo libre)</h2>
+        <button
+          type="button"
+          className="chat-clear-context"
+          onClick={handleClearContext}
+          disabled={thinking}
+          title="Limpiar contexto"
+          aria-label="Limpiar contexto"
+        >
+          <span className="esri-icon esri-icon-trash" aria-hidden="true"></span>
+        </button>
       </div>
 
       <div className="chat-messages">

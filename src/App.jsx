@@ -15,7 +15,12 @@ export default function App() {
         <div className="map-column">
           <MapViewComponent onViewReady={setView} onOpenTable={setTableLayer} />
           <QueryResultsPanel results={queryResults} onClose={() => setQueryResults(null)} />
-          <AttributeTablePanel view={view} layer={tableLayer} onClose={() => setTableLayer(null)} />
+          <AttributeTablePanel
+            view={view}
+            layer={tableLayer}
+            onSelectLayer={setTableLayer}
+            onClose={() => setTableLayer(null)}
+          />
         </div>
         <ChatSidebar view={view} onResults={setQueryResults} />
       </div>

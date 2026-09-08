@@ -54,8 +54,12 @@ async function buildEntityQueryNode(state) {
     return { resultText: `La capa <b>${state.layer.title}</b> no tiene ningún campo de nombre reconocible para buscar la entidad.` };
   }
 
+  const userContent = [`Petición del usuario: "${state.userPrompt}"`, formatConversationHistory(state.history)]
+    .filter(Boolean)
+    .join("\n\n");
+
   const extraction = await callStructuredLLM(EXTRACT_SEARCH_TEXT_PROMPT, [
-    { role: "user", content: `${formatConversationHistory(state.history)}Petición del usuario: "${state.userPrompt}"` }
+    { role: "user", content: userContent }
   ], ExtractSearchTextSchema);
 
   const searchText = extraction?.search_text?.trim();

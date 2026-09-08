@@ -154,7 +154,13 @@ async function buildQueryNode(state) {
   const profile = await getLayerProfile(state.layer);
   const fieldsDescription = describeFieldsForPrompt(profile);
 
-  const userContent = `${formatConversationHistory(state.history)}Campos disponibles en la capa "${state.layer.title}":\n${fieldsDescription}\n\nPetición del usuario: "${state.userPrompt}"`;
+  const userContent = [
+    `Petición del usuario: "${state.userPrompt}"`,
+    `Campos disponibles en la capa "${state.layer.title}":\n${fieldsDescription}`,
+    formatConversationHistory(state.history)
+  ]
+    .filter(Boolean)
+    .join("\n\n");
   const result = await callStructuredLLM(BUILD_QUERY_PROMPT, [{ role: "user", content: userContent }], BuildQuerySchema);
 
   const metricField = result?.metric_field_hint ? findBestField(state.fields, result.metric_field_hint) : null;
