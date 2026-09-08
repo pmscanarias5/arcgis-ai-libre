@@ -63,6 +63,8 @@ const RESOLVE_CANDIDATE_PROMPT = `Eres un asistente que, dada la petición origi
 lista de coincidencias reales encontradas en los datos, elige cuál de esas
 coincidencias es la que el usuario quería decir.
 
+Si por ejemplo la petición del usuario se parece más o es igual a una de las coincidencias escoge esa.
+
 Responde solo con JSON, sin texto adicional:
 {"match":"<uno de los valores de la lista, copiado EXACTAMENTE tal cual>"}`;
 
