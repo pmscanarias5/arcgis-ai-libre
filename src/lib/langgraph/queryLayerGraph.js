@@ -12,6 +12,7 @@ import {
   buildRecordsFromFeatures
 } from "./sharedNodes.js";
 import { getLayerProfile, describeFieldsForPrompt } from "./layerCatalog.js";
+import { formatNumber } from "../formatNumber.js";
 
 const QueryLayerState = Annotation.Root({
   userPrompt: Annotation(),
@@ -218,7 +219,7 @@ async function executeQueryNode(state) {
       countQuery.spatialRelationship = state.spatialRelation;
     }
     const count = await layer.queryFeatureCount(countQuery);
-    return { resultText: `La capa <b>${layer.title}</b>${filterSuffix} tiene <b>${count}</b> elemento(s).` };
+    return { resultText: `La capa <b>${layer.title}</b>${filterSuffix} tiene <b>${formatNumber(count)}</b> elemento(s).` };
   }
 
   const query = layer.createQuery();
@@ -269,7 +270,7 @@ async function executeQueryNode(state) {
     const items = result.features
       .map((f) => {
         const label = state.labelField ? f.attributes[state.labelField.name] : "—";
-        const value = f.attributes[state.metricField.name];
+        const value = formatNumber(f.attributes[state.metricField.name]);
         return `<li>${label}: <b>${value}</b></li>`;
       })
       .join("");
@@ -282,7 +283,7 @@ async function executeQueryNode(state) {
 
     resultText = `${heading}:<ul>${items}</ul>`;
   } else {
-    resultText = `He encontrado <b>${totalCount}</b> elemento(s) en <b>${layer.title}</b>${filterSuffix}.`;
+    resultText = `He encontrado <b>${formatNumber(totalCount)}</b> elemento(s) en <b>${layer.title}</b>${filterSuffix}.`;
   }
 
   const geometries = result.features.map((f) => f.geometry).filter(Boolean);

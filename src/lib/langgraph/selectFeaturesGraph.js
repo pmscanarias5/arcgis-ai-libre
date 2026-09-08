@@ -11,6 +11,7 @@ import {
 } from "./sharedNodes.js";
 import { getLayerProfile, describeFieldsForPrompt } from "./layerCatalog.js";
 import { applySelection } from "../mapActions/selectionSync.js";
+import { formatNumber } from "../formatNumber.js";
 
 const SelectFeaturesState = Annotation.Root({
   userPrompt: Annotation(),
@@ -227,7 +228,7 @@ async function executeSelectionNode(state) {
   }
 
   return {
-    resultText: `He seleccionado <b>${result.features.length}</b> elemento(s) en <b>${layer.title}</b>${filterSuffix}. Se han resaltado en el mapa. Puedes abrir la tabla de atributos de la capa para ver el detalle de cada entidad.`
+    resultText: `He seleccionado <b>${formatNumber(result.features.length)}</b> elemento(s) en <b>${layer.title}</b>${filterSuffix}. Se han resaltado en el mapa. Puedes abrir la tabla de atributos de la capa para ver el detalle de cada entidad.`
   };
 }
 

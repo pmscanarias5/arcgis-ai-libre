@@ -1,4 +1,9 @@
 import { useEffect, useState } from "react";
+import { formatNumber } from "../lib/formatNumber.js";
+
+function formatFieldValue(value) {
+  return typeof value === "number" ? formatNumber(value) : String(value);
+}
 
 // Panel flotante sobre el mapa que resume las entidades extraídas de una
 // consulta (todos sus atributos, no solo el campo consultado), inspirado en
@@ -48,7 +53,7 @@ export default function QueryResultsPanel({ results, onClose }) {
       </div>
 
       <div className="query-results-count">
-        Entidades encontradas: <b>{totalCount ?? records.length}</b>
+        Entidades encontradas: <b>{formatNumber(totalCount ?? records.length)}</b>
       </div>
 
       <div className="query-results-list">
@@ -59,7 +64,7 @@ export default function QueryResultsPanel({ results, onClose }) {
               {record.fields.map((field) => (
                 <div className="query-results-field-row" key={field.label}>
                   <dt>{field.label}</dt>
-                  <dd>{field.value != null && field.value !== "" ? String(field.value) : "—"}</dd>
+                  <dd>{field.value != null && field.value !== "" ? formatFieldValue(field.value) : "—"}</dd>
                 </div>
               ))}
             </dl>
