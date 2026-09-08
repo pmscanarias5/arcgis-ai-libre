@@ -334,8 +334,21 @@ export async function resolveEntityGeometry(layer, searchText, userPrompt) {
  * null si no se pudo resolver (buffer inexistente, capa/entidad no
  * encontrada, o si spatialFilter es null). La usan tanto select_features
  * como query_layer.
+ *
+ * "excludeLayerId" es la capa que se está consultando/seleccionando (no
+ * tiene sentido buscar en ella misma la entidad de referencia).
+ *
+ * Para "layer_entity": si el LLM da "target_layer_hint" se prueba esa capa
+ * primero (rápido, sin red de más). Si no lo da, o esa capa no tenía
+ * realmente la entidad, se busca en PARALELO en todas las capas consultables
+ * del mapa cuál la tiene de verdad — así no depende de que el LLM "sepa" de
+ * cultura geográfica que, por ejemplo, Cullera es un municipio: lo decide
+ * la búsqueda de verdad contra los datos, no una suposición del modelo. El
+ * coste de esa búsqueda amplia es bajo: para las capas que no tienen esa
+ * entidad, la única consulta real es un LIKE barato (resolveEntityGeometry
+ * corta antes de desambiguar/pedir geometría si no hay candidatos).
  */
-export async function resolveSpatialFilter(spatialFilter, { view, userPrompt }) {
+export async function resolveSpatialFilter(spatialFilter, { view, userPrompt, excludeLayerId }) {
   if (!spatialFilter) return null;
 
   if (spatialFilter.reference === "buffer") {
@@ -344,15 +357,27 @@ export async function resolveSpatialFilter(spatialFilter, { view, userPrompt }) 
     return { geometry: buffer.geometry, relation: spatialFilter.relation, description: `${spatialFilter.relation} ${buffer.label}` };
   }
 
-  if (spatialFilter.reference === "layer_entity" && spatialFilter.target_layer_hint && spatialFilter.target_entity_hint) {
-    const targetLayer = findLayerByHint(view.map.layers.toArray(), spatialFilter.target_layer_hint);
-    if (!targetLayer) return null;
+  if (spatialFilter.reference !== "layer_entity" || !spatialFilter.target_entity_hint) return null;
 
-    const resolved = await resolveEntityGeometry(targetLayer, spatialFilter.target_entity_hint, userPrompt);
-    if (!resolved) return null;
+  const queryableLayers = view.map.layers
+    .toArray()
+    .filter((l) => typeof l.queryFeatures === "function" && l.id !== excludeLayerId);
 
-    return { geometry: resolved.geometry, relation: spatialFilter.relation, description: `${spatialFilter.relation} ${resolved.description}` };
+  if (spatialFilter.target_layer_hint) {
+    const hintedLayer = findLayerByHint(queryableLayers, spatialFilter.target_layer_hint);
+    if (hintedLayer) {
+      const resolved = await resolveEntityGeometry(hintedLayer, spatialFilter.target_entity_hint, userPrompt);
+      if (resolved) {
+        return { geometry: resolved.geometry, relation: spatialFilter.relation, description: `${spatialFilter.relation} ${resolved.description}` };
+      }
+    }
   }
 
-  return null;
+  const attempts = await Promise.allSettled(
+    queryableLayers.map((l) => resolveEntityGeometry(l, spatialFilter.target_entity_hint, userPrompt))
+  );
+  const found = attempts.find((r) => r.status === "fulfilled" && r.value)?.value;
+  if (!found) return null;
+
+  return { geometry: found.geometry, relation: spatialFilter.relation, description: `${spatialFilter.relation} ${found.description}` };
 }

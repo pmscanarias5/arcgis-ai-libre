@@ -127,23 +127,32 @@ antes, filter_groups igual que antes (provincia = Madrid, aunque no se repita).
 Además de "filter_groups" (condiciones sobre los propios atributos), la
 petición puede pedir una relación ESPACIAL con otra entidad o capa (p.ej.
 "que intersecan con...", "dentro de...", "que contienen...", "que tocan...",
-"que cruzan...", "que se solapan con..."). En ese caso añade:
+"que cruzan...", "que se solapan con...", "que pasan por...", "que
+atraviesan...", "que recorren..."). En ese caso añade:
 
 "spatial_filter": {
   "relation":"intersects|contains|within|touches|crosses|overlaps|disjoint",
   "reference":"buffer|layer_entity",
-  "target_layer_hint":"<palabra clave de la OTRA capa, o null si reference es buffer>",
-  "target_entity_hint":"<nombre de la entidad a buscar en esa capa, o null si reference es buffer>"
+  "target_layer_hint":"<palabra clave de la OTRA capa, o null si no sabes en qué capa está o reference es buffer>",
+  "target_entity_hint":"<nombre de la entidad a buscar, o null si reference es buffer>"
 }
 
 Usa "reference":"buffer" cuando la petición se refiere a un área de
 influencia o buffer creado antes en la conversación ("ese buffer", "el área
 de influencia anterior", "la zona que generamos antes"). Usa
-"reference":"layer_entity" cuando nombra un lugar/capa concretos.
+"reference":"layer_entity" cuando nombra un lugar concreto (aunque no diga
+explícitamente de qué tipo de capa es: un municipio, río, provincia... puede
+nombrarse solo por su nombre propio, como "Cullera" o "el Tajo").
+"target_layer_hint" es OPCIONAL: si no tienes certeza de en qué capa está esa
+entidad, déjalo en null — la aplicación busca automáticamente en qué capa
+real está, no hace falta que lo adivines tú.
 Si no hay ninguna relación espacial en la petición, usa "spatial_filter":null.
 
 Ejemplo: "selecciona los ríos que intersecan con la provincia de Guadalajara" ->
 spatial_filter:{"relation":"intersects","reference":"layer_entity","target_layer_hint":"provincia","target_entity_hint":"Guadalajara"}
+
+Ejemplo: "qué ríos pasan por Cullera" (no se sabe de qué tipo de lugar es
+Cullera) -> spatial_filter:{"relation":"intersects","reference":"layer_entity","target_layer_hint":null,"target_entity_hint":"Cullera"}
 
 Ejemplo: "los municipios que están completamente dentro de ese buffer" ->
 spatial_filter:{"relation":"within","reference":"buffer","target_layer_hint":null,"target_entity_hint":null}`;
@@ -175,7 +184,11 @@ async function buildQueryNode(state) {
   let spatialRelation = null;
   let spatialDescription = null;
   if (result?.spatial_filter) {
-    const resolvedSpatial = await resolveSpatialFilter(result.spatial_filter, { view: state.view, userPrompt: state.userPrompt });
+    const resolvedSpatial = await resolveSpatialFilter(result.spatial_filter, {
+      view: state.view,
+      userPrompt: state.userPrompt,
+      excludeLayerId: state.layer.id
+    });
     if (!resolvedSpatial) {
       return { resultText: "No he podido identificar la entidad o el buffer de referencia para aplicar la relación espacial." };
     }
