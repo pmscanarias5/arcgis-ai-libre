@@ -79,11 +79,12 @@ export const SelectFeaturesSchema = z.object({
  */
 
 export const IntentSchema = z.object({
-  action: z.enum(["change_basemap", "go_to_location", "print_map", "query_layer", "buffer_entity", "select_features","clear_selection", "none"]),
+  action: z.enum(["change_basemap", "go_to_location", "print_map", "query_layer", "buffer_entity", "select_features","clear_selection", "explain_capabilities", "none"]),
   params: z.object({
     basemap: z.string().optional(),
     query: z.string().optional(),
     title: z.string().nullable().optional(),
-    reply: z.string().optional()
+    reply: z.string().optional(),
+    topic: z.enum(["capabilities", "layers", "basemaps"]).optional()
   })
 });

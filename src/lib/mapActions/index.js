@@ -6,6 +6,7 @@ import { printMap } from "./printMap.js";
 import { bufferEntity } from "./bufferEntity.js";
 import { selectFeatures } from "./selectFeatures.js";
 import { clearSelection } from "./clearSelection.js";
+import { explainCapabilities } from "./explainCapabilities.js";
 import { none } from "./none.js";
 
 // Registro de acciones disponibles. Cada una recibe (view, params) y
@@ -21,5 +22,6 @@ export const mapActions = {
   buffer_entity: bufferEntity,
   select_features: selectFeatures,
   clear_selection: clearSelection,
+  explain_capabilities: explainCapabilities,
   none
 };
