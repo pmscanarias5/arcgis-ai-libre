@@ -11,20 +11,53 @@ arcgis-ai-chat/
 ├── index.html
 ├── vite.config.js
 ├── package.json
-├── .env.example
 └── src/
     ├── main.jsx
     ├── App.jsx
     ├── index.css
+    ├── assets/
+    │   └── ign-logo.png
     ├── hooks/
-    │   └── useArcGISMap.js      # inicializa WebMap + MapView
+    │   ├── useArcGISMap.js           # inicializa WebMap + MapView
+    │   └── useMapWidgets.js          # Zoom, LayerList, BasemapGallery, botón quitar selección
     ├── components/
-    │   ├── MapView.jsx          # contenedor del mapa
-    │   ├── ChatSidebar.jsx      # lógica del chat y orquestación
-    │   └── ChatMessage.jsx
+    │   ├── MapView.jsx               # contenedor del mapa
+    │   ├── ChatSidebar.jsx           # lógica del chat, maneja needsInput/resume
+    │   ├── ChatMessage.jsx           # mensaje + botones de opciones
+    │   ├── AttributeTablePanel.jsx   # FeatureTable en panel inferior fijo
+    │   └── QueryResultsPanel.jsx     # panel flotante con resultados de consulta
     └── lib/
-        ├── llmClient.js         # llamada al modelo (endpoint OpenAI-compatible)
-        └── mapActions.js        # acciones ejecutables sobre `view`
+        ├── llmClient.js              # router de intenciones (getIntent)
+        ├── formatNumber.js           # formato numérico es-ES (separador de miles)
+        ├── llm/
+        │   ├── callStructuredLLM.js  # llamada al LLM + validación Zod + reintento
+        │   └── schemas.js            # esquemas Zod
+        ├── geocoder/
+        │   └── cartociudad.js        # cliente JSONP de CartoCiudad
+        ├── mapActions/
+        │   ├── index.js              # registro central de acciones
+        │   ├── changeBasemap.js
+        │   ├── basemapAliases.js
+        │   ├── goToLocation.js
+        │   ├── createBuffer.js
+        │   ├── bufferEntity.js       # wrapper sobre langgraph/bufferEntityGraph.js
+        │   ├── queryLayer.js         # wrapper sobre langgraph/queryLayerGraph.js
+        │   ├── selectFeatures.js     # wrapper sobre langgraph/selectFeaturesGraph.js
+        │   ├── clearSelection.js
+        │   ├── printMap.js           # GPServer de impresión del IGN
+        │   ├── explainCapabilities.js # explica qué puede hacer el asistente
+        │   ├── none.js
+        │   ├── selectionState.js     # selecciones activas por capa
+        │   ├── selectionSync.js      # sincroniza selección chat <-> tabla
+        │   ├── featureTableRegistry.js # tablas de atributos abiertas
+        │   ├── lastBufferState.js    # último buffer generado, reutilizable
+        │   └── mapActions.js
+        └── langgraph/
+            ├── sharedNodes.js        # nodos y utilidades comunes a los grafos
+            ├── layerCatalog.js       # perfil de capas/campos (cacheado) para el LLM
+            ├── queryLayerGraph.js
+            ├── bufferEntityGraph.js
+            └── selectFeaturesGraph.js
 ```
 
 ## Puesta en marcha
@@ -33,26 +66,28 @@ arcgis-ai-chat/
 ```bash
 cd arcgis-ai-chat
 npm install
-cp .env.example .env   # y ajusta las variables
 npm run dev
 ```
 
-## Eligiendo el modelo de IA "libre"
+Antes de `npm run dev`, crea un fichero `.env` en la raíz del proyecto (no se sube
+a git) con esta plantilla y ajusta los valores a tu entorno:
 
-`llmClient.js` habla con cualquier endpoint compatible con la API
-`chat/completions` de OpenAI, así que puedes apuntarlo a:
+```env
+# LLM (cualquier endpoint compatible con chat/completions de OpenAI)
+VITE_LLM_BASE_URL=http://localhost:11434/v1   # Ollama local por defecto
+VITE_LLM_MODEL=llama3.1
+VITE_LLM_API_KEY=                             # vacío si el proveedor no la pide (Ollama, LM Studio)
 
-- **Ollama en local** (100% gratuito y offline): instala Ollama, ejecuta
-  `ollama pull llama3.1` y `ollama serve`. `VITE_LLM_BASE_URL=http://localhost:11434/v1`.
-- **LM Studio en local**: arranca el servidor local y usa
-  `VITE_LLM_BASE_URL=http://localhost:1234/v1`.
-- **Groq (free tier, en la nube, muy rápido)**: `VITE_LLM_BASE_URL=https://api.groq.com/openai/v1`
-  con tu `VITE_LLM_API_KEY` y un modelo como `llama-3.1-70b-versatile`.
+# ArcGIS
+VITE_WEBMAP_ITEM_ID=<id-del-webmap>
 
-No hay dependencia de `openai` npm ni de LangChain en este punto de partida — es un
-`fetch` directo para mantenerlo simple. Si luego quieres reutilizar el patrón que ya
-tienes en `buffer-assistant.js` (extracción estructurada con Zod + LangGraph), puedes
-sustituir `llmClient.js` por esa misma lógica sin tocar `mapActions.js` ni `ChatSidebar.jsx`.
+# Servicios del IGN (opcionales: si se omiten se usan los públicos por defecto)
+VITE_GEOCODER_URL=https://nco.ign.es/geocoder/rest/services/geocoder/GeocodeServer
+VITE_PRINT_SERVICE_URL=https://serviciosgis.ign.es/servicios/rest/services/Signa/ServicioImpresionSignA/GPServer/Exportar%20mapa%20Web
+```
+
+> Las variables con prefijo `VITE_` acaban en el bundle del navegador: no pongas
+> aquí claves de pago que no quieras exponer.
 
 ## Cómo funciona el flujo
 
