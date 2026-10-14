@@ -29,8 +29,6 @@ arcgis-ai-chat/
 
 ## Puesta en marcha
 
-Este scaffold ya está generado (equivalente a `npm create vite@latest arcgis-ai-chat -- --template react`
-más las dependencias de ArcGIS). Para arrancarlo en tu máquina:
 
 ```bash
 cd arcgis-ai-chat
@@ -64,10 +62,3 @@ sustituir `llmClient.js` por esa misma lógica sin tocar `mapActions.js` ni `Cha
 3. `ChatSidebar` despacha esa acción a `mapActions`, que opera directamente sobre
    la instancia `view` de ArcGIS Maps SDK.
 4. La respuesta del mapActions se muestra como mensaje del bot.
-
-## Próximos pasos sugeridos
-
-- Añadir más acciones a `mapActions.js` (consultas a capas WMS/FeatureServer, geoprocesos).
-- Sustituir el parsing JSON manual por *tool calling* nativo si el proveedor lo soporta.
-- Persistir el WebMap `item-id` y credenciales de portal vía variables de entorno.
-- Si despliegas en IIS, revisar `base` en `vite.config.js` (ya viste este problema en el proyecto anterior).
