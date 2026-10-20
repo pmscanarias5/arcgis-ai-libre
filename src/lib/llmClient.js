@@ -105,8 +105,6 @@ const SYSTEM_PROMPT = `Eres el orquestador de un asistente de mapas GIS. Tu úni
   esto", "exporta la vista actual", "descárgame esto en PDF". "title" es un título
   opcional si el usuario lo menciona explícitamente; si no, usa null.
 
-  Para "go_to_location" calcula tú mismo las coordenadas aproximadas del lugar mencionado.
-
   Si la petición no encaja en ninguna acción, usa "none" y responde de forma breve y útil.
   TEN EN CUENTA LOS MENSAJES HISTORICOS PARA ANALIZAR LA ÚLTIMA PETICIÓN DE USUARIO
 
