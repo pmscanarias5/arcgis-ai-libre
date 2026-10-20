@@ -9,7 +9,9 @@ dist-ssr/
 .env
 .env.local
 .env.*.local
-CLAUDE.md
+
+# Contexto local de Claude Code (solo el de la raíz)
+/CLAUDE.md
 
 # Logs
 npm-debug.log*
