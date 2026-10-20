@@ -60,7 +60,7 @@ export function useMapWidgets(view, onOpenTable) {
     brand.innerHTML =
       '<span class="geocoder-banner__brand-title">Sign<span class="geocoder-banner__brand-accent">A</span></span>' +
       '<span class="geocoder-banner__brand-subtitle">Sistema de Información Geográfica Nacional</span>';
-    geocoderBanner.appendChild(brand);
+    // geocoderBanner.appendChild(brand);
 
     const searchContainer = document.createElement("div");
     searchContainer.className = "geocoder-banner__search";

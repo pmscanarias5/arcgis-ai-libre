@@ -137,7 +137,7 @@ export default function ChatSidebar({ view, onResults }) {
     <div className="chat-sidebar">
       <div className="chat-header">
         <div className={`status-indicator ${thinking ? "thinking" : ""}`}></div>
-        <h2>Asistente GIS (modelo libre)</h2>
+        <h2>Asistente de mapa</h2>
         <button
           type="button"
           className="chat-clear-context"
@@ -161,7 +161,13 @@ export default function ChatSidebar({ view, onResults }) {
             onOptionSelect={m.resumeFn}
           />
         ))}
-        {thinking && <ChatMessage sender="bot" text="Procesando petición…" time={now()} />}
+        {thinking && (
+          <div className="message bot typing-indicator" role="status" aria-label="Procesando petición">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        )}
       </div>
 
       <div className="chat-input-container">

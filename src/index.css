@@ -1,14 +1,20 @@
 :root {
-  --bg-dark: #09131a;
-  --panel-bg: #111e25;
-  --accent-teal: #00e6c3;
-  --accent-hover: #00b398;
-  --text-main: #e1f1f5;
-  --text-muted: #809a9f;
-  --border-color: #1e313b;
-  --user-msg-bg: #1c3644;
-  --bot-msg-bg: #162630;
-  --geocoder-blue: #1e313b;
+  --bg-app: #f6f4ef;
+  --panel-bg: #ffffff;
+  --surface-soft: #f3f1ec;
+  --accent: #2f7d6d;
+  --accent-hover: #256659;
+  --accent-soft: #e3f0ec;
+  --accent-highlight: #cfe5de;
+  --text-main: #2b2f33;
+  --text-muted: #6b7378;
+  --text-on-accent: #ffffff;
+  --border-color: #e4e0d8;
+  --user-msg-bg: var(--accent-soft);
+  --bot-msg-bg: var(--surface-soft);
+  --warning: #e0a03a;
+  --danger: #c0392b;
+  --shadow-soft: 0 2px 10px rgba(40, 35, 25, 0.08);
   --geocoder-accent-pink: #e6007e;
 }
 
@@ -16,14 +22,14 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-family: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 html, body, #root {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background-color: var(--bg-dark);
+  background-color: var(--bg-app);
   color: var(--text-main);
 }
 
@@ -56,8 +62,8 @@ html, body, #root {
   max-height: calc(100% - 100px);
   background-color: var(--panel-bg);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  border-radius: 12px;
+  box-shadow: var(--shadow-soft);
   display: flex;
   flex-direction: column;
   z-index: 15;
@@ -65,12 +71,13 @@ html, body, #root {
 }
 
 .query-results-header {
-  padding: 10px 14px;
+  padding: 12px 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background-color: var(--geocoder-blue);
-  color: #fff;
+  background-color: var(--surface-soft);
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-main);
   font-weight: 600;
   font-size: 0.9rem;
   flex-shrink: 0;
@@ -79,14 +86,14 @@ html, body, #root {
 .query-results-close {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-muted);
   cursor: pointer;
   font-size: 1rem;
   line-height: 1;
 }
 
 .query-results-close:hover {
-  color: #fff;
+  color: var(--text-main);
 }
 
 .query-results-count {
@@ -112,7 +119,7 @@ html, body, #root {
 }
 
 .query-results-record-title {
-  color: var(--accent-teal);
+  color: var(--accent);
   font-weight: 600;
   font-size: 0.9rem;
   margin-bottom: 6px;
@@ -147,7 +154,7 @@ html, body, #root {
   background: none;
   border: none;
   border-top: 1px solid var(--border-color);
-  color: var(--accent-teal);
+  color: var(--accent);
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
@@ -155,7 +162,7 @@ html, body, #root {
 }
 
 .query-results-show-more:hover {
-  background-color: rgba(0, 230, 195, 0.08);
+  background-color: var(--accent-soft);
   color: var(--accent-hover);
 }
 
@@ -193,7 +200,7 @@ html, body, #root {
 
 .attribute-table-resize-handle:hover::before,
 .attribute-table-resize-handle.is-dragging::before {
-  background-color: var(--accent-teal);
+  background-color: var(--accent);
 }
 
 .attribute-table-header {
@@ -232,8 +239,8 @@ html, body, #root {
 }
 
 .attribute-table-tab.active {
-  color: var(--accent-teal);
-  border-bottom-color: var(--accent-teal);
+  color: var(--accent);
+  border-bottom-color: var(--accent);
   font-weight: 600;
 }
 
@@ -247,7 +254,7 @@ html, body, #root {
 }
 
 .attribute-table-close:hover {
-  color: #fff;
+  color: var(--text-main);
 }
 
 .attribute-table-footer {
@@ -263,11 +270,11 @@ html, body, #root {
 }
 
 .attribute-table-toggle-filter {
-  background: none;
-  border: 1px solid var(--accent-teal);
-  color: var(--accent-teal);
-  border-radius: 6px;
-  padding: 4px 10px;
+  background-color: var(--accent-soft);
+  border: none;
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 5px 12px;
   font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
@@ -276,8 +283,8 @@ html, body, #root {
 }
 
 .attribute-table-toggle-filter:hover {
-  background-color: var(--accent-teal);
-  color: #052423;
+  background-color: var(--accent);
+  color: var(--text-on-accent);
 }
 
 .attribute-table-container {
@@ -288,16 +295,16 @@ html, body, #root {
 /* La tabla de atributos (FeatureTable) resalta las celdas de una fila
    seleccionada internamente con vaadin-grid::part(body-cell highlight),
    que por defecto usa var(--calcite-color-foreground-3) (un gris apenas
-   perceptible en el tema oscuro). Esa regla vive dentro del shadow DOM de
-   vaadin-grid con su propio !important, así que sobrescribir la propiedad
+   distinguible de las filas normales). Esa regla vive dentro del shadow DOM
+   de vaadin-grid con su propio !important, así que sobrescribir la propiedad
    background-color desde fuera (vía ::part) no gana. En cambio, las
    variables CSS sí heredan a través del shadow DOM, así que se pisa
    directamente el valor de la variable en el propio elemento vaadin-grid. */
 .attribute-table-container vaadin-grid {
-  --calcite-color-foreground-3: rgba(0, 230, 195, 0.35);
+  --calcite-color-foreground-3: var(--accent-highlight);
 }
- .attribute-table-container {
-  --calcite-color-foreground-3: rgba(0, 230, 195, 0.65);
+.attribute-table-container {
+  --calcite-color-foreground-3: var(--accent-highlight);
 }
 
 #viewDiv {
@@ -333,14 +340,14 @@ html, body, #root {
   border-left: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
-  box-shadow: -4px 0 15px rgba(0, 0, 0, 0.4);
+  box-shadow: -2px 0 10px rgba(40, 35, 25, 0.06);
   z-index: 10;
 }
 
 .chat-header {
   padding: 18px 20px;
   border-bottom: 1px solid var(--border-color);
-  background: linear-gradient(180deg, rgba(0, 230, 195, 0.08) 0%, rgba(0, 0, 0, 0) 100%);
+  background-color: var(--panel-bg);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -358,7 +365,7 @@ html, body, #root {
 }
 
 .chat-clear-context:hover {
-  color: #fff;
+  color: var(--text-main);
 }
 
 .chat-clear-context:disabled {
@@ -370,26 +377,24 @@ html, body, #root {
 .chat-header h2 {
   font-size: 1.1rem;
   font-weight: 600;
-  color: #fff;
+  color: var(--text-main);
 }
 
 .chat-header .status-indicator {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background-color: var(--accent-teal);
-  box-shadow: 0 0 8px var(--accent-teal);
+  background-color: var(--accent);
 }
 
 .status-indicator.thinking {
-  background-color: #f5a623;
-  box-shadow: 0 0 8px #f5a623;
-  animation: pulse 1s infinite;
+  background-color: var(--warning);
+  animation: pulse 1.6s ease-in-out infinite;
 }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+  50% { opacity: 0.4; }
 }
 
 .chat-messages {
@@ -399,14 +404,15 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  background-color: var(--bg-app);
 }
 
 .message {
   max-width: 85%;
   padding: 12px 16px;
-  border-radius: 12px;
+  border-radius: 16px;
   font-size: 0.9rem;
-  line-height: 1.4;
+  line-height: 1.5;
   word-wrap: break-word;
 }
 .message-options {
@@ -417,34 +423,34 @@ html, body, #root {
 }
 
 .message-option-btn {
-  background-color: var(--bg-dark);
-  color: var(--accent-teal);
-  border: 1px solid var(--accent-teal);
-  border-radius: 8px;
-  padding: 6px 12px;
+  background-color: var(--accent-soft);
+  color: var(--accent);
+  border: none;
+  border-radius: 999px;
+  padding: 6px 14px;
   font-size: 0.85rem;
+  font-weight: 600;
   cursor: pointer;
   transition: background-color 0.2s, color 0.2s;
 }
 
 .message-option-btn:hover {
-  background-color: var(--accent-teal);
-  color: #052423;
+  background-color: var(--accent);
+  color: var(--text-on-accent);
 }
 
 .message.user {
   align-self: flex-end;
   background-color: var(--user-msg-bg);
-  color: #fff;
-  border-bottom-right-radius: 2px;
-  border: 1px solid rgba(0, 230, 195, 0.2);
+  color: var(--text-main);
+  border-bottom-right-radius: 4px;
 }
 
 .message.bot {
   align-self: flex-start;
-  background-color: var(--bot-msg-bg);
+  background-color: var(--panel-bg);
   color: var(--text-main);
-  border-bottom-left-radius: 2px;
+  border-bottom-left-radius: 4px;
   border: 1px solid var(--border-color);
 }
 
@@ -453,6 +459,35 @@ html, body, #root {
   color: var(--text-muted);
   margin-top: 4px;
   text-align: right;
+}
+
+/* Indicador de "escribiendo": sustituye al antiguo texto "Procesando
+   petición…", que se confundía con una respuesta real del bot. */
+.typing-indicator {
+  display: flex;
+  gap: 5px;
+  padding: 14px 16px;
+}
+
+.typing-indicator span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--text-muted);
+  animation: typing-bounce 1.2s ease-in-out infinite;
+}
+
+.typing-indicator span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typing-indicator span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
 }
 
 .chat-input-container {
@@ -465,29 +500,34 @@ html, body, #root {
 
 #userInput {
   flex: 1;
-  background-color: #0b161d;
+  background-color: var(--surface-soft);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 12px 14px;
-  color: #fff;
+  color: var(--text-main);
   font-size: 0.9rem;
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+#userInput::placeholder {
+  color: var(--text-muted);
 }
 
 #userInput:focus {
-  border-color: var(--accent-teal);
+  border-color: var(--accent);
+  background-color: var(--panel-bg);
 }
 
 #userInput:disabled {
-  opacity: 0.5;
+  opacity: 0.6;
 }
 
 #sendBtn {
-  background-color: var(--accent-teal);
-  color: #052423;
+  background-color: var(--accent);
+  color: var(--text-on-accent);
   border: none;
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 0 18px;
   font-weight: 600;
   cursor: pointer;
@@ -504,7 +544,7 @@ html, body, #root {
 }
 
 .clear-selection-button.has-selection {
-  color: var(--accent-teal);
+  color: var(--accent);
 }
 
 .clear-selection-button.has-selection:hover {
@@ -519,22 +559,23 @@ html, body, #root {
   display: flex;
   align-items: center;
   gap: 14px;
-  background-color: var(--geocoder-blue);
+  background-color: var(--panel-bg);
+  border: 1px solid var(--border-color);
   padding: 6px 14px 6px 6px;
   border-radius: 999px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-soft);
 }
 
 .geocoder-banner__logo-wrap {
   display: flex;
   align-items: center;
-  background-color: #fff;
+  background-color: var(--panel-bg);
   border-radius: 999px;
   padding: 4px 12px;
 }
 
 .geocoder-banner__logo {
-  height: 26px;
+  height: 40px;
   width: auto;
   display: block;
 }
@@ -549,7 +590,7 @@ html, body, #root {
 .geocoder-banner__brand-title {
   font-size: 1.25rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--text-main);
 }
 
 .geocoder-banner__brand-accent {
@@ -558,24 +599,20 @@ html, body, #root {
 
 .geocoder-banner__brand-subtitle {
   font-size: 0.6rem;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--text-muted);
 }
 
 .geocoder-banner__search {
   min-width: 280px;
-  background-color: #fff;
+  background-color: var(--surface-soft);
+  border: 1px solid var(--border-color);
   border-radius: 999px;
   overflow: hidden;
   /* El Search widget usa componentes Calcite internos (input, botón) que
-     leen estas variables de color: se pisan aquí para que, dentro del
-     buscador, pasen de la paleta oscura de la app a una píldora blanca. */
-  --calcite-color-foreground-1: #fff;
-  --calcite-color-foreground-2: #f2f2f2;
-  --calcite-color-foreground-3: #e6e6e6;
-  --calcite-color-text-1: #1a1a2e;
-  --calcite-color-text-2: #4a4a4a;
-  --calcite-color-text-3: #6b6b6b;
-  --calcite-color-border-input: #d8d8d8;
+     leen estas variables de color: se pisan para que el input se funda con
+     el fondo crema de la píldora en vez de quedar como un recuadro blanco. */
+  --calcite-color-foreground-1: var(--surface-soft);
+  --calcite-color-border-input: transparent;
 }
 
 .geocoder-banner__search .esri-search {
