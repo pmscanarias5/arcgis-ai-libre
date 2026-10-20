@@ -454,6 +454,17 @@ html, body, #root {
   border: 1px solid var(--border-color);
 }
 
+.message .chat-link {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.message .chat-link:hover {
+  color: var(--accent-hover);
+}
+
 .message .timestamp {
   font-size: 0.7rem;
   color: var(--text-muted);

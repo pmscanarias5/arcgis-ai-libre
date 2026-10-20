@@ -12,7 +12,7 @@ const createWelcomeMessage = () => ({
   time: now()
 });
 
-export default function ChatSidebar({ view, onResults }) {
+export default function ChatSidebar({ view, onResults, onOpenTable }) {
   const [messages, setMessages] = useState([createWelcomeMessage()]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
@@ -123,6 +123,11 @@ export default function ChatSidebar({ view, onResults }) {
     }
   }
 
+  function handleOpenTable(layerId) {
+    const layer = view?.map.allLayers.find((l) => l.id === layerId);
+    if (layer && onOpenTable) onOpenTable(layer);
+  }
+
   function handleKeyPress(e) {
     if (e.key === "Enter") handleSend();
   }
@@ -159,6 +164,7 @@ export default function ChatSidebar({ view, onResults }) {
             time={m.time}
             options={m.options}
             onOptionSelect={m.resumeFn}
+            onOpenTable={handleOpenTable}
           />
         ))}
         {thinking && (

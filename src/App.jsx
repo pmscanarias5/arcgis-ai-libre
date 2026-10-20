@@ -22,7 +22,7 @@ export default function App() {
             onClose={() => setTableLayer(null)}
           />
         </div>
-        <ChatSidebar view={view} onResults={setQueryResults} />
+        <ChatSidebar view={view} onResults={setQueryResults} onOpenTable={setTableLayer} />
       </div>
     </div>
   );

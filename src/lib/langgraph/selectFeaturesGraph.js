@@ -228,7 +228,7 @@ async function executeSelectionNode(state) {
   }
 
   return {
-    resultText: `He seleccionado <b>${formatNumber(result.features.length)}</b> elemento(s) en <b>${layer.title}</b>${filterSuffix}. Se han resaltado en el mapa. Puedes abrir la tabla de atributos de la capa para ver el detalle de cada entidad.`
+    resultText: `He seleccionado <b>${formatNumber(result.features.length)}</b> elemento(s) en <b>${layer.title}</b>${filterSuffix}. Se han resaltado en el mapa. Puedes abrir la <a href="#" class="chat-link" data-open-table-layer-id="${String(layer.id).replace(/"/g, "&quot;")}">tabla de atributos</a> de la capa para ver el detalle de cada entidad.`
   };
 }
 
